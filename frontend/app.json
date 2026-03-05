@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Snap URL",
+    "slug": "snap-url",
+    "scheme": "snapurl",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.snapurl.app"
+    },
+    "android": {
+      "package": "com.snapurl.app"
+    },
+    "extra": {
+      "apiBaseUrl": "http://localhost:3000"
+    }
+  }
+}

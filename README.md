@@ -23,6 +23,19 @@ npm install
 npm run dev
 ```
 
+## 프론트엔드(iOS 앱) 실행
+```bash
+cd frontend
+npm install
+npm run start
+```
+
+iOS 시뮬레이터 실행:
+```bash
+cd frontend
+npm run ios
+```
+
 ## 백엔드 환경변수
 - `OPENAI_API_KEY`: 설정 시 LLM 요약 사용
 - `OPENAI_MODEL`: 기본 `gpt-4o-mini`

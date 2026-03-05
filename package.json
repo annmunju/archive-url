@@ -5,6 +5,9 @@
     "build": "npm --prefix backend run build",
     "dev": "npm --prefix backend run dev",
     "start": "npm --prefix backend run start",
-    "backend:install": "npm --prefix backend install"
+    "backend:install": "npm --prefix backend install",
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:start": "npm --prefix frontend run start",
+    "frontend:ios": "npm --prefix frontend run ios"
   }
 }
