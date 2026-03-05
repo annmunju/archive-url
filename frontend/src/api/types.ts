@@ -17,6 +17,16 @@ export type IngestJob = {
   finished_at: string | null;
 };
 
+export type IngestJobListItem = {
+  id: number;
+  normalized_url: string | null;
+  status: IngestJobStatus;
+  document_id: number | null;
+  error_code: string | null;
+  error_message: string | null;
+  updated_at: string;
+};
+
 export type ExtractedLink = {
   url: string;
   content: string;
@@ -28,6 +38,7 @@ export type DocumentListItem = {
   title: string;
   description: string;
   summary: string;
+  category_key: string;
   created_at: string;
 };
 
@@ -38,8 +49,15 @@ export type Document = {
   description: string;
   content: string;
   summary: string;
+  category_key: string;
   links: ExtractedLink[];
   created_at: string;
+};
+
+export type CategoryItem = {
+  key: string;
+  label: string;
+  order: number;
 };
 
 export type ApiErrorBody = {

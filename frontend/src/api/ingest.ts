@@ -1,5 +1,5 @@
 import { apiFetch } from "./client";
-import type { IngestJob } from "./types";
+import type { IngestJob, IngestJobListItem, IngestJobStatus } from "./types";
 
 type CreateIngestResponse = {
   job: IngestJob;
@@ -16,6 +16,10 @@ type GetJobResponse = {
   };
 };
 
+type ListIngestJobsResponse = {
+  items: IngestJobListItem[];
+};
+
 export async function createIngestJob(url: string): Promise<CreateIngestResponse> {
   return apiFetch<CreateIngestResponse>("/ingest", {
     method: "POST",
@@ -25,4 +29,12 @@ export async function createIngestJob(url: string): Promise<CreateIngestResponse
 
 export async function getIngestJob(id: number): Promise<GetJobResponse> {
   return apiFetch<GetJobResponse>(`/ingest-jobs/${id}`);
+}
+
+export async function listIngestJobs(limit: number, status?: IngestJobStatus): Promise<ListIngestJobsResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (status) {
+    params.set("status", status);
+  }
+  return apiFetch<ListIngestJobsResponse>(`/ingest-jobs?${params.toString()}`);
 }

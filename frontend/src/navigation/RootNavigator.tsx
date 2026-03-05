@@ -6,7 +6,6 @@ import type { RootStackParamList, TabParamList } from "@/types/navigation";
 import { colors, radius } from "@/theme/tokens";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { DocumentsScreen } from "@/screens/DocumentsScreen";
-import { ProcessingScreen } from "@/screens/ProcessingScreen";
 import { DocumentDetailScreen } from "@/screens/DocumentDetailScreen";
 import { EditDocumentScreen } from "@/screens/EditDocumentScreen";
 
@@ -53,7 +52,6 @@ export function RootNavigator() {
     >
       <Stack.Navigator>
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
-        <Stack.Screen name="Processing" component={ProcessingScreen} options={{ title: "처리 중" }} />
         <Stack.Screen name="DocumentDetail" component={DocumentDetailScreen} options={{ title: "" }} />
         <Stack.Screen name="EditDocument" component={EditDocumentScreen} options={{ title: "" }} />
       </Stack.Navigator>

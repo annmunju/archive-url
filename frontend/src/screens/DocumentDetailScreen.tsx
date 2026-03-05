@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect } from "react";
+import { useCallback, useLayoutEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -38,9 +38,11 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
   const deleteMutation = useMutation({
     mutationFn: () => deleteDocument(documentId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
       Alert.alert("삭제 완료", "문서를 삭제했습니다.");
-      navigation.replace("Tabs", { screen: "Documents" });
+      navigation.replace("Tabs", {
+        screen: "Documents",
+        params: { refreshToken: Date.now(), refreshDelayMs: 3000 },
+      });
     },
     onError: (error) => {
       const message =
@@ -61,6 +63,14 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
       ),
     });
   }, [documentQuery.data?.document.url, navigation]);
+
+  const visibleLinks = useMemo(
+    () =>
+      (documentQuery.data?.document.links ?? []).filter(
+        (link) => (link.content ?? "").trim().toLowerCase() !== "original source",
+      ),
+    [documentQuery.data?.document.links],
+  );
 
   if (documentQuery.isLoading || !documentQuery.data) {
     return (
@@ -117,9 +127,14 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>관련 링크</Text>
+        <Text style={styles.sectionTitle}>메모</Text>
+        <Text style={styles.body}>{doc.description || "메모가 없습니다."}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>링크</Text>
         <View style={styles.links}>
-          {doc.links.map((link, index) => (
+          {visibleLinks.map((link, index) => (
             <Pressable key={`${link.url}-${index}`} style={styles.linkCard} onPress={() => openUrl(link.url)}>
               <Text style={styles.linkUrl}>{link.url}</Text>
               <Text style={styles.linkDesc}>{link.content}</Text>

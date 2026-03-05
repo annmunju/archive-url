@@ -16,7 +16,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { colors, radius, spacing } from "@/theme/tokens";
 import type { RootStackParamList } from "@/types/navigation";
 import type { DocumentListItem, ExtractedLink } from "@/api/types";
-import { cleanTitle, getListDescription } from "@/utils/text";
+import { cleanSummary, cleanTitle } from "@/utils/text";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EditDocument">;
 
@@ -30,23 +30,17 @@ export function EditDocumentScreen({ route, navigation }: Props) {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [summary, setSummary] = useState("");
   const [links, setLinks] = useState<ExtractedLink[]>([]);
   const [newUrl, setNewUrl] = useState("");
   const [newContent, setNewContent] = useState("");
 
   useEffect(() => {
     if (!query.data) return;
-    const listLikeItem = {
-      id: query.data.document.id,
-      url: query.data.document.url,
-      title: query.data.document.title,
-      description: query.data.document.description,
-      summary: query.data.document.summary,
-      created_at: query.data.document.created_at,
-    };
     setTitle(cleanTitle(query.data.document.title));
-    setDescription(getListDescription(listLikeItem));
-    setLinks(query.data.document.links);
+    setDescription(query.data.document.description);
+    setSummary(cleanSummary(query.data.document.summary));
+    setLinks(query.data.document.links.filter((link) => !isOriginalSourceLink(link)));
   }, [query.data]);
 
   const saveMutation = useMutation({
@@ -93,7 +87,10 @@ export function EditDocumentScreen({ route, navigation }: Props) {
       await queryClient.refetchQueries({ queryKey: ["document", documentId], type: "all" });
       await queryClient.refetchQueries({ queryKey: ["documents"], type: "all" });
       Alert.alert("저장 완료", "문서를 수정했습니다.");
-      navigation.goBack();
+      navigation.replace("Tabs", {
+        screen: "Documents",
+        params: { refreshToken: Date.now(), refreshDelayMs: 3000 },
+      });
     },
     onError: (error) => {
       const message =
@@ -143,13 +140,22 @@ export function EditDocumentScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.label}>설명</Text>
+        <Text style={styles.label}>요약 (읽기 전용)</Text>
+        <TextInput
+          value={summary}
+          editable={false}
+          style={[styles.input, styles.multiInput, styles.readOnlyInput]}
+          multiline
+        />
+      </View>
+      <View style={styles.section}>
+        <Text style={styles.label}>메모</Text>
         <TextInput
           value={description}
           onChangeText={setDescription}
           style={[styles.input, styles.multiInput]}
           multiline
-          placeholder="문서 설명"
+          placeholder="문서 메모"
         />
       </View>
 
@@ -157,7 +163,7 @@ export function EditDocumentScreen({ route, navigation }: Props) {
 
       <View style={styles.section}>
         <View style={styles.linkHeader}>
-          <Text style={styles.label}>관련 링크</Text>
+          <Text style={styles.label}>링크</Text>
           <Pressable style={styles.addButton} onPress={addLink} disabled={!canAddLink}>
             <Text style={styles.addText}>+ 추가</Text>
           </Pressable>
@@ -245,6 +251,9 @@ const styles = StyleSheet.create({
     minHeight: 120,
     textAlignVertical: "top",
   },
+  readOnlyInput: {
+    color: colors.textSecondary,
+  },
   linkHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -309,4 +318,8 @@ function isHttpUrl(value: string) {
   } catch {
     return false;
   }
+}
+
+function isOriginalSourceLink(link: ExtractedLink) {
+  return (link.content ?? "").trim().toLowerCase() === "original source";
 }

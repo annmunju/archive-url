@@ -29,6 +29,7 @@ class DB:
                     description TEXT NOT NULL,
                     content TEXT NOT NULL,
                     summary TEXT NOT NULL,
+                    category_key TEXT NOT NULL DEFAULT 'uncategorized',
                     links TEXT NOT NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
@@ -59,7 +60,20 @@ class DB:
                 ON ingest_jobs(normalized_url);
                 """
             )
+            self._ensure_documents_category_column()
             self._conn.commit()
+
+    def _ensure_documents_category_column(self):
+        columns = self._conn.execute("PRAGMA table_info(documents)").fetchall()
+        names = {column["name"] for column in columns}
+        if "category_key" in names:
+            return
+        self._conn.execute(
+            "ALTER TABLE documents ADD COLUMN category_key TEXT NOT NULL DEFAULT 'uncategorized'"
+        )
+        self._conn.execute(
+            "UPDATE documents SET category_key = 'uncategorized' WHERE category_key IS NULL OR category_key = ''"
+        )
 
     @staticmethod
     def _parse_document_row(row: Optional[sqlite3.Row]) -> Optional[dict[str, Any]]:
@@ -72,6 +86,7 @@ class DB:
             "description": row["description"],
             "content": row["content"],
             "summary": row["summary"],
+            "category_key": row["category_key"],
             "links": json.loads(row["links"]),
             "created_at": row["created_at"],
         }
@@ -84,6 +99,7 @@ class DB:
             "title": row["title"],
             "description": row["description"],
             "summary": row["summary"],
+            "category_key": row["category_key"],
             "created_at": row["created_at"],
         }
 
@@ -113,13 +129,14 @@ class DB:
         with self._lock:
             self._conn.execute(
                 """
-                INSERT INTO documents (url, title, description, content, summary, links)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO documents (url, title, description, content, summary, category_key, links)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(url) DO UPDATE SET
                   title=excluded.title,
                   description=excluded.description,
                   content=excluded.content,
                   summary=excluded.summary,
+                  category_key=excluded.category_key,
                   links=excluded.links
                 """,
                 (
@@ -128,12 +145,13 @@ class DB:
                     input_data["description"],
                     input_data["content"],
                     input_data["summary"],
+                    input_data.get("category_key", "uncategorized"),
                     json.dumps(input_data["links"]),
                 ),
             )
             row = self._conn.execute(
                 """
-                SELECT id, url, title, description, content, summary, links, created_at
+                SELECT id, url, title, description, content, summary, category_key, links, created_at
                 FROM documents
                 WHERE url = ?
                 """,
@@ -148,7 +166,7 @@ class DB:
         with self._lock:
             row = self._conn.execute(
                 """
-                SELECT id, url, title, description, content, summary, links, created_at
+                SELECT id, url, title, description, content, summary, category_key, links, created_at
                 FROM documents
                 WHERE id = ?
                 """,
@@ -160,7 +178,7 @@ class DB:
         with self._lock:
             rows = self._conn.execute(
                 """
-                SELECT id, url, title, description, summary, created_at
+                SELECT id, url, title, description, summary, category_key, created_at
                 FROM documents
                 ORDER BY id DESC
                 LIMIT ?
@@ -197,7 +215,7 @@ class DB:
                 return None
             row = self._conn.execute(
                 """
-                SELECT id, url, title, description, content, summary, links, created_at
+                SELECT id, url, title, description, content, summary, category_key, links, created_at
                 FROM documents
                 WHERE id = ?
                 """,
@@ -307,7 +325,7 @@ class DB:
                       created_at, updated_at, started_at, finished_at
                     FROM ingest_jobs
                     WHERE status = ?
-                    ORDER BY id DESC
+                    ORDER BY updated_at DESC, id DESC
                     LIMIT ?
                     """,
                     (status, limit),
@@ -320,7 +338,7 @@ class DB:
                       error_code, error_message, document_id,
                       created_at, updated_at, started_at, finished_at
                     FROM ingest_jobs
-                    ORDER BY id DESC
+                    ORDER BY updated_at DESC, id DESC
                     LIMIT ?
                     """,
                     (limit,),

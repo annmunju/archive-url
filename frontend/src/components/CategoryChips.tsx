@@ -1,23 +1,18 @@
 import { ScrollView, Pressable, StyleSheet, Text } from "react-native";
 import { colors, radius } from "@/theme/tokens";
-import type { Category } from "@/utils/category";
+import type { CategorySelection } from "@/utils/category";
+import type { CategoryItem } from "@/api/types";
 
 type Props = {
-  value: Category;
-  onChange: (value: Category) => void;
+  options: CategoryItem[];
+  value: CategorySelection;
+  onChange: (value: CategorySelection) => void;
 };
 
-const labels: { key: Category; label: string }[] = [
-  { key: "all", label: "전체" },
-  { key: "tech", label: "기술" },
-  { key: "design", label: "디자인" },
-  { key: "business", label: "비즈니스" },
-];
-
-export function CategoryChips({ value, onChange }: Props) {
+export function CategoryChips({ options, value, onChange }: Props) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.container}>
-      {labels.map((item) => {
+      {options.map((item) => {
         const active = item.key === value;
         return (
           <Pressable

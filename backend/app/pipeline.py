@@ -1,13 +1,35 @@
 import re
+import json
+from typing import Any, Dict, Optional, TypedDict
 from urllib.parse import urlparse
 
 import httpx
-from openai import AsyncOpenAI
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, START, StateGraph
 
+from .categories import classify_category_key, get_category_keys, normalize_category_key
 from .db import db
 from .settings import settings
 
-_llm = AsyncOpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
+
+class PipelineState(TypedDict, total=False):
+    raw_url: str
+    url: str
+    jina_url: str
+    markdown: str
+    extracted: dict[str, Any]
+    summary: str
+    category_key: str
+    stored_id: int
+
+
+_llm: Optional[ChatOpenAI] = None
+if settings.openai_api_key:
+    _llm = ChatOpenAI(
+        model=settings.openai_model,
+        temperature=0.2,
+        api_key=settings.openai_api_key,
+    )
 
 
 def normalize_url(raw_url: str) -> str:
@@ -23,6 +45,32 @@ def to_jina_url(url: str) -> str:
     return f"https://r.jina.ai/http://{without_protocol}"
 
 
+def is_image_url(url: str) -> bool:
+    image_extensions = {
+        ".apng",
+        ".avif",
+        ".bmp",
+        ".gif",
+        ".heic",
+        ".heif",
+        ".ico",
+        ".jfif",
+        ".jpeg",
+        ".jpg",
+        ".png",
+        ".svg",
+        ".tif",
+        ".tiff",
+        ".webp",
+    }
+    try:
+        parsed = urlparse(url)
+    except Exception:  # noqa: BLE001
+        return False
+    path = (parsed.path or "").lower()
+    return any(path.endswith(ext) for ext in image_extensions)
+
+
 def extract_links_from_markdown(markdown: str, base_url: str) -> list[dict[str, str]]:
     link_regex = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)")
     seen: set[str] = set()
@@ -31,7 +79,7 @@ def extract_links_from_markdown(markdown: str, base_url: str) -> list[dict[str, 
     for match in link_regex.finditer(markdown):
         content = (match.group(1) or "").strip()
         url = (match.group(2) or "").strip()
-        if not url or url in seen:
+        if not url or url in seen or is_image_url(url):
             continue
         seen.add(url)
         links.append({"url": url, "content": content})
@@ -52,21 +100,28 @@ def first_non_empty_line(text: str) -> str:
 
 def strip_markdown(text: str) -> str:
     return (
-        re.sub(r"\s+", " ",
-            re.sub(r"\*\*|__|\*|_", "",
-                re.sub(r"^#{1,6}\s+", "", 
-                    re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1",
-                        re.sub(r"!\[[^\]]*\]\([^)]*\)", " ",
-                            re.sub(r"`([^`]+)`", r"\1",
-                                re.sub(r"```[\s\S]*?```", " ", text)
-                            )
-                        )
+        re.sub(
+            r"\s+",
+            " ",
+            re.sub(
+                r"\*\*|__|\*|_",
+                "",
+                re.sub(
+                    r"^#{1,6}\s+",
+                    "",
+                    re.sub(
+                        r"\[([^\]]+)\]\([^)]*\)",
+                        r"\1",
+                        re.sub(
+                            r"!\[[^\]]*\]\([^)]*\)",
+                            " ",
+                            re.sub(r"`([^`]+)`", r"\1", re.sub(r"```[\s\S]*?```", " ", text)),
+                        ),
                     ),
                     flags=re.MULTILINE,
-                )
-            )
-        )
-        .strip()
+                ),
+            ),
+        ).strip()
     )
 
 
@@ -79,9 +134,52 @@ def fallback_summary(text: str) -> str:
     return f"{collapsed[:500]}..."
 
 
-async def summarize_text(title: str, description: str, content: str) -> str:
+async def normalize_node(state: PipelineState) -> dict[str, Any]:
+    url = normalize_url(state["raw_url"])
+    return {
+        "url": url,
+        "jina_url": to_jina_url(url),
+    }
+
+
+async def fetch_jina_node(state: PipelineState) -> dict[str, Any]:
+    timeout_seconds = settings.jina_fetch_timeout_ms / 1000
+    async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
+        response = await client.get(state["jina_url"], headers={"User-Agent": "snap-url-bot/0.1"})
+
+    if response.status_code < 200 or response.status_code >= 300:
+        raise RuntimeError(f"Jina fetch failed: {response.status_code} {response.reason_phrase}")
+
+    markdown = response.text
+    if not markdown or len(markdown.strip()) < 30:
+        raise RuntimeError("Jina fetch returned empty markdown")
+
+    return {"markdown": markdown}
+
+
+async def extract_node(state: PipelineState) -> dict[str, Any]:
+    markdown = state["markdown"].strip()
+    title = first_non_empty_line(markdown).removeprefix("# ")[:180]
+    plain = strip_markdown(markdown)
+
+    extracted = {
+        "title": title,
+        "description": "",
+        "content": plain[:30000],
+        "contentHtmls": [],
+        "links": extract_links_from_markdown(markdown, state["url"]),
+    }
+    return {"extracted": extracted}
+
+
+async def summarize_node(state: PipelineState) -> dict[str, Any]:
+    extracted = state["extracted"]
+    title = extracted["title"]
+    description = extracted["description"]
+    content = extracted["content"]
+
     if _llm is None:
-        return fallback_summary(f"{title}\n{description}\n{content}")
+        return {"summary": fallback_summary(f"{title}\n{description}\n{content}")}
 
     trimmed = content[:12000]
     prompt = "\n".join(
@@ -100,57 +198,108 @@ async def summarize_text(title: str, description: str, content: str) -> str:
         ]
     )
 
-    completion = await _llm.chat.completions.create(
-        model=settings.openai_model,
-        temperature=0.2,
-        messages=[{"role": "user", "content": prompt}],
+    result = await _llm.ainvoke(prompt)
+    result_content = result.content if isinstance(result.content, str) else str(result.content)
+    return {"summary": result_content.strip()}
+
+
+def _extract_json_object(raw_text: str) -> Optional[Dict[str, Any]]:
+    try:
+        return json.loads(raw_text)
+    except Exception:  # noqa: BLE001
+        match = re.search(r"\{[\s\S]*\}", raw_text)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(0))
+        except Exception:  # noqa: BLE001
+            return None
+
+
+async def classify_category_node(state: PipelineState) -> dict[str, Any]:
+    extracted = state["extracted"]
+    fallback = classify_category_key(extracted["title"], extracted["description"], state["summary"])
+
+    if _llm is None:
+        return {"category_key": fallback}
+
+    allowed_keys = get_category_keys()
+    trimmed = extracted["content"][:3000]
+    prompt = "\n".join(
+        [
+            "다음 문서를 분류해라.",
+            f"허용 category_key: {', '.join(allowed_keys)}",
+            f"반드시 위 키 중 하나만 사용하고, 확신이 낮으면 {fallback} 사용.",
+            '출력은 JSON 한 줄만: {"category_key":"..."}',
+            "문서 제목:",
+            extracted["title"] or "(제목 없음)",
+            "문서 설명:",
+            extracted["description"] or "(설명 없음)",
+            "문서 요약:",
+            state["summary"] or "(요약 없음)",
+            "문서 본문 발췌:",
+            trimmed or "(본문 없음)",
+        ]
     )
-    return (completion.choices[0].message.content or "").strip()
+
+    try:
+        result = await _llm.ainvoke(prompt)
+        result_content = result.content if isinstance(result.content, str) else str(result.content)
+        payload = _extract_json_object(result_content)
+        candidate = payload.get("category_key") if isinstance(payload, dict) else None
+        return {"category_key": normalize_category_key(candidate)}
+    except Exception:  # noqa: BLE001
+        return {"category_key": fallback}
 
 
-async def ingest_url(raw_url: str) -> dict:
-    url = normalize_url(raw_url)
-    jina_url = to_jina_url(url)
-
-    timeout_seconds = settings.jina_fetch_timeout_ms / 1000
-    async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
-        response = await client.get(jina_url, headers={"User-Agent": "snap-url-bot/0.1"})
-    if response.status_code < 200 or response.status_code >= 300:
-        raise RuntimeError(f"Jina fetch failed: {response.status_code} {response.reason_phrase}")
-
-    markdown = response.text
-    if not markdown or len(markdown.strip()) < 30:
-        raise RuntimeError("Jina fetch returned empty markdown")
-
-    title = first_non_empty_line(markdown).removeprefix("# ")[:180]
-    plain = strip_markdown(markdown)
-
-    extracted = {
-        "title": title,
-        "description": f"jina markdown mirror from {url}",
-        "content": plain[:30000],
-        "contentHtmls": [],
-        "links": extract_links_from_markdown(markdown, url),
-    }
-
-    summary = await summarize_text(extracted["title"], extracted["description"], extracted["content"])
-
+async def persist_node(state: PipelineState) -> dict[str, Any]:
+    extracted = state["extracted"]
     row = db.upsert_document(
         {
-            "url": url,
+            "url": state["url"],
             "title": extracted["title"],
             "description": extracted["description"],
             "content": extracted["content"],
-            "summary": summary,
+            "summary": state["summary"],
+            "category_key": state["category_key"],
             "links": extracted["links"],
+        }
+    )
+    return {"stored_id": int(row["id"])}
+
+
+_graph_builder: StateGraph = StateGraph(PipelineState)
+_graph_builder.add_node("normalize", normalize_node)
+_graph_builder.add_node("fetch_jina", fetch_jina_node)
+_graph_builder.add_node("extract", extract_node)
+_graph_builder.add_node("summarize", summarize_node)
+_graph_builder.add_node("classify_category", classify_category_node)
+_graph_builder.add_node("persist", persist_node)
+_graph_builder.add_edge(START, "normalize")
+_graph_builder.add_edge("normalize", "fetch_jina")
+_graph_builder.add_edge("fetch_jina", "extract")
+_graph_builder.add_edge("extract", "summarize")
+_graph_builder.add_edge("summarize", "classify_category")
+_graph_builder.add_edge("classify_category", "persist")
+_graph_builder.add_edge("persist", END)
+_graph = _graph_builder.compile()
+
+
+async def ingest_url(raw_url: str) -> dict[str, Any]:
+    output: PipelineState = await _graph.ainvoke(
+        {
+            "raw_url": raw_url,
+            "url": raw_url,
+            "jina_url": "",
+            "markdown": "",
         }
     )
 
     return {
-        "id": row["id"],
-        "url": url,
-        "jinaUrl": jina_url,
+        "id": output["stored_id"],
+        "url": output["url"],
+        "jinaUrl": output["jina_url"],
         "fetchMode": "jina-markdown",
-        "extracted": extracted,
-        "summary": summary,
+        "extracted": output["extracted"],
+        "summary": output["summary"],
     }

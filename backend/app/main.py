@@ -6,6 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
+from .categories import list_categories
 from .db import db
 from .jobs import bootstrap_ingest_worker, enqueue_ingest_job
 from .pipeline import normalize_url
@@ -184,6 +185,8 @@ async def list_ingest_jobs(
                 "status": job["status"],
                 "normalized_url": job["normalized_url"],
                 "document_id": job["document_id"],
+                "error_code": job["error_code"],
+                "error_message": job["error_message"],
                 "updated_at": job["updated_at"],
             }
             for job in items
@@ -201,6 +204,11 @@ async def list_documents(limit: int = Query(default=20, ge=1, le=100), offset: i
             content=error_response("INVALID_REQUEST_BODY", "Invalid query", False, {"issues": exc.errors()}),
         )
     return {"items": db.list_documents(parsed.limit, parsed.offset)}
+
+
+@app.get("/categories")
+async def get_categories():
+    return {"items": list_categories()}
 
 
 @app.get("/documents/{doc_id}")

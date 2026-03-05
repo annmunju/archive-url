@@ -1,15 +1,18 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { createIngestJob } from "@/api/ingest";
+import { createIngestJob, listIngestJobs } from "@/api/ingest";
+import type { IngestJobListItem, IngestJobStatus } from "@/api/types";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import type { RootStackParamList } from "@/types/navigation";
 import { colors, radius, spacing, typography } from "@/theme/tokens";
+import { fromNow } from "@/utils/time";
 
-type HomeNavigation = NativeStackNavigationProp<RootStackParamList>;
+const INGEST_LIST_LIMIT = 10;
+const INGEST_LIST_POLL_MS = 5000;
+const INGEST_JOBS_QUERY_KEY = ["ingestJobs"] as const;
+
+const ACTIVE_STATUSES: IngestJobStatus[] = ["queued", "running"];
 
 function isValidUrl(value: string) {
   try {
@@ -21,23 +24,44 @@ function isValidUrl(value: string) {
 }
 
 export function HomeScreen() {
-  const navigation = useNavigation<HomeNavigation>();
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const queryClient = useQueryClient();
   const valid = isValidUrl(url);
 
   const mutation = useMutation({
     mutationFn: (rawUrl: string) => createIngestJob(rawUrl),
-    onSuccess: ({ job }) => {
-      navigation.navigate("Processing", {
-        jobId: job.id,
-        normalizedUrl: job.normalized_url,
-      });
+    onSuccess: () => {
+      setUrl("");
+      setError("");
+      queryClient.invalidateQueries({ queryKey: INGEST_JOBS_QUERY_KEY });
     },
     onError: (err: Error) => {
       setError(err.message);
     },
   });
+
+  const ingestJobsQuery = useQuery({
+    queryKey: [...INGEST_JOBS_QUERY_KEY, INGEST_LIST_LIMIT],
+    queryFn: () => listIngestJobs(INGEST_LIST_LIMIT),
+    staleTime: 0,
+    refetchInterval: INGEST_LIST_POLL_MS,
+    refetchOnWindowFocus: true,
+  });
+
+  const activeJobs = useMemo(
+    () =>
+      (ingestJobsQuery.data?.items ?? []).filter((item) =>
+        ACTIVE_STATUSES.includes(item.status),
+      ),
+    [ingestJobsQuery.data?.items],
+  );
+
+  const failedJobs = useMemo(
+    () =>
+      (ingestJobsQuery.data?.items ?? []).filter((item) => item.status === "failed"),
+    [ingestJobsQuery.data?.items],
+  );
 
   const onSubmit = () => {
     if (!valid) {
@@ -64,9 +88,89 @@ export function HomeScreen() {
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <PrimaryButton label="수집 시작" onPress={onSubmit} disabled={!valid} loading={mutation.isPending} />
+      <View style={styles.jobsSection}>
+        <Text style={styles.jobsTitle}>수집 요청 현황</Text>
+        {ingestJobsQuery.isLoading ? <Text style={styles.jobsMeta}>불러오는 중...</Text> : null}
+        {ingestJobsQuery.isError ? <Text style={styles.jobsError}>요청 현황을 불러오지 못했습니다.</Text> : null}
+        {!ingestJobsQuery.isLoading && !ingestJobsQuery.isError && activeJobs.length === 0 ? (
+          <Text style={styles.jobsMeta}>진행 중인 요청이 없습니다.</Text>
+        ) : null}
+        {activeJobs.map((item) => (
+          <IngestJobRow key={item.id} item={item} />
+        ))}
+        {failedJobs.length > 0 ? <Text style={styles.failedTitle}>최근 실패</Text> : null}
+        {failedJobs.map((item) => (
+          <IngestJobRow key={item.id} item={item} />
+        ))}
+      </View>
     </SafeAreaView>
   );
 }
+
+function IngestJobRow({ item }: { item: IngestJobListItem }) {
+  return (
+    <View style={styles.jobRow}>
+      <View style={styles.jobHeader}>
+        <Text style={styles.jobId}>#{item.id}</Text>
+        <StatusBadge status={item.status} />
+      </View>
+      <Text style={styles.jobUrl} numberOfLines={2} ellipsizeMode="tail">
+        {item.normalized_url ?? "URL 정규화 대기 중"}
+      </Text>
+      <Text style={styles.jobUpdated}>최근 갱신 {fromNow(item.updated_at)}</Text>
+      {item.status === "failed" && item.error_message ? (
+        <Text style={styles.jobError} numberOfLines={2}>
+          {item.error_message}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function StatusBadge({ status }: { status: IngestJobStatus }) {
+  return (
+    <View style={[styles.badge, STATUS_STYLE[status]]}>
+      <Text style={[styles.badgeText, STATUS_TEXT_STYLE[status]]}>{STATUS_LABEL[status]}</Text>
+    </View>
+  );
+}
+
+const STATUS_LABEL: Record<IngestJobStatus, string> = {
+  queued: "대기",
+  running: "처리 중",
+  failed: "실패",
+  succeeded: "완료",
+};
+
+const STATUS_STYLE: Record<IngestJobStatus, object> = {
+  queued: {
+    backgroundColor: colors.border,
+  },
+  running: {
+    backgroundColor: colors.primary,
+  },
+  failed: {
+    backgroundColor: colors.error,
+  },
+  succeeded: {
+    backgroundColor: colors.success,
+  },
+};
+
+const STATUS_TEXT_STYLE: Record<IngestJobStatus, object> = {
+  queued: {
+    color: colors.textPrimary,
+  },
+  running: {
+    color: "#FFFFFF",
+  },
+  failed: {
+    color: "#FFFFFF",
+  },
+  succeeded: {
+    color: "#FFFFFF",
+  },
+};
 
 const styles = StyleSheet.create({
   screen: {
@@ -81,13 +185,13 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   inputCard: {
-    height: 157,
+    height: 56,
     borderRadius: radius.md,
     backgroundColor: colors.input,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    justifyContent: "center",
   },
   input: {
     ...typography.body,
@@ -100,5 +204,75 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: colors.error,
     fontSize: 13,
+  },
+  jobsSection: {
+    gap: 10,
+    marginTop: 4,
+  },
+  jobsTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    color: colors.textPrimary,
+  },
+  jobsMeta: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  jobsError: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: colors.error,
+  },
+  failedTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  jobRow: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+    backgroundColor: colors.input,
+  },
+  jobHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  jobId: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  jobUrl: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  jobUpdated: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  jobError: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: colors.error,
+    lineHeight: 17,
+  },
+  badge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  badgeText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
   },
 });

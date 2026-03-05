@@ -2,10 +2,6 @@ import type { NavigatorScreenParams } from "@react-navigation/native";
 
 export type RootStackParamList = {
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
-  Processing: {
-    jobId: number;
-    normalizedUrl: string | null;
-  };
   DocumentDetail: {
     documentId: number;
   };
@@ -16,5 +12,10 @@ export type RootStackParamList = {
 
 export type TabParamList = {
   Home: undefined;
-  Documents: undefined;
+  Documents:
+    | {
+        refreshToken?: number;
+        refreshDelayMs?: number;
+      }
+    | undefined;
 };
