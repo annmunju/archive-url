@@ -56,13 +56,8 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerBackTitleVisible: false,
-      headerRight: () => (
-        <Pressable style={styles.circleButton} onPress={() => shareUrl(documentQuery.data?.document.url)}>
-          <Text style={styles.shareText}>↗</Text>
-        </Pressable>
-      ),
     });
-  }, [documentQuery.data?.document.url, navigation]);
+  }, [navigation]);
 
   const visibleLinks = useMemo(
     () =>
@@ -96,6 +91,10 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>{title}</Text>
+      </View>
+
       <View style={styles.actionRow}>
         <Pressable
           style={[styles.actionButton, deleteMutation.isPending && styles.actionButtonDisabled]}
@@ -105,16 +104,14 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
           <Text style={styles.actionText}>수정</Text>
         </Pressable>
         <Pressable
-          style={[styles.actionButton, deleteMutation.isPending && styles.actionButtonDisabled]}
-          onPress={onDelete}
-          disabled={deleteMutation.isPending}
+          style={styles.actionButton}
+          onPress={() => shareUrl(doc.url)}
         >
-          <Text style={styles.actionText}>삭제</Text>
+          <Text style={styles.actionText}>공유</Text>
         </Pressable>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.title}>{title}</Text>
         <Text style={styles.url} onPress={() => openUrl(doc.url)}>
           {doc.url}
         </Text>
@@ -158,7 +155,6 @@ async function shareUrl(url?: string) {
   if (!url) return;
   await Share.share({
     message: url,
-    url,
   });
 }
 
@@ -179,6 +175,11 @@ const styles = StyleSheet.create({
   loading: {
     ...typography.body,
     color: colors.textSecondary,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   circleButton: {
     width: 44,
