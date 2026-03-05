@@ -22,6 +22,15 @@ export type StoredDocument = {
   created_at: string;
 };
 
+export type StoredDocumentListItem = {
+  id: number;
+  url: string;
+  title: string;
+  description: string;
+  summary: string;
+  created_at: string;
+};
+
 export type IngestJobStatus = "queued" | "running" | "succeeded" | "failed";
 
 export type IngestJob = {

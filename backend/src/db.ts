@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
-import type { ExtractedLink, IngestJob, IngestJobStatus, StoredDocument } from "./types.js";
+import type {
+  ExtractedLink,
+  IngestJob,
+  IngestJobStatus,
+  StoredDocument,
+  StoredDocumentListItem,
+} from "./types.js";
 
 const dbPath = process.env.DB_PATH ?? "./data/snap-url.db";
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -77,10 +83,16 @@ const getByUrlStmt = db.prepare(`
 `);
 
 const listStmt = db.prepare(`
-  SELECT id, url, title, description, content, summary, links, created_at
+  SELECT id, url, title, description, summary, created_at
   FROM documents
   ORDER BY id DESC
   LIMIT ?
+  OFFSET ?
+`);
+
+const deleteDocumentStmt = db.prepare(`
+  DELETE FROM documents
+  WHERE id = ?
 `);
 
 const createIngestJobStmt = db.prepare(`
@@ -120,6 +132,17 @@ const getIngestJobByIdempotencyStmt = db.prepare(`
     created_at, updated_at, started_at, finished_at
   FROM ingest_jobs
   WHERE idempotency_key = ? AND normalized_url = ?
+  ORDER BY id DESC
+  LIMIT 1
+`);
+
+const getRunningIngestJobByNormalizedUrlStmt = db.prepare(`
+  SELECT
+    id, request_id, idempotency_key, raw_url, normalized_url, status, attempt, max_attempts,
+    error_code, error_message, document_id,
+    created_at, updated_at, started_at, finished_at
+  FROM ingest_jobs
+  WHERE normalized_url = ? AND status = 'running'
   ORDER BY id DESC
   LIMIT 1
 `);
@@ -219,6 +242,17 @@ function parseRow(row: any): StoredDocument {
   };
 }
 
+function parseListRow(row: any): StoredDocumentListItem {
+  return {
+    id: row.id,
+    url: row.url,
+    title: row.title,
+    description: row.description,
+    summary: row.summary,
+    created_at: row.created_at,
+  };
+}
+
 function parseIngestJobRow(row: any): IngestJob {
   return {
     id: row.id,
@@ -257,9 +291,52 @@ export function getDocumentById(id: number): StoredDocument | null {
   return row ? parseRow(row) : null;
 }
 
-export function listDocuments(limit = 20): StoredDocument[] {
-  const rows = listStmt.all(limit) as any[];
-  return rows.map(parseRow);
+export function listDocuments(limit = 20, offset = 0): StoredDocumentListItem[] {
+  const rows = listStmt.all(limit, offset) as any[];
+  return rows.map(parseListRow);
+}
+
+export function updateDocumentById(
+  id: number,
+  patch: {
+    title?: string;
+    description?: string;
+    links?: ExtractedLink[];
+  },
+): StoredDocument | null {
+  const sets: string[] = [];
+  const params: Record<string, unknown> = { id };
+
+  if (patch.title !== undefined) {
+    sets.push("title = @title");
+    params.title = patch.title;
+  }
+  if (patch.description !== undefined) {
+    sets.push("description = @description");
+    params.description = patch.description;
+  }
+  if (patch.links !== undefined) {
+    sets.push("links = @links");
+    params.links = JSON.stringify(patch.links);
+  }
+
+  if (sets.length === 0) {
+    return getDocumentById(id);
+  }
+
+  const updateStmt = db.prepare(`
+    UPDATE documents
+    SET ${sets.join(", ")}
+    WHERE id = @id
+  `);
+  const info = updateStmt.run(params);
+  if (!info.changes) return null;
+  return getDocumentById(id);
+}
+
+export function deleteDocumentById(id: number): boolean {
+  const info = deleteDocumentStmt.run(id);
+  return info.changes > 0;
 }
 
 export function createIngestJob(input: {
@@ -284,6 +361,11 @@ export function getIngestJobByIdempotencyKey(
   normalizedUrl: string,
 ): IngestJob | null {
   const row = getIngestJobByIdempotencyStmt.get(idempotencyKey, normalizedUrl);
+  return row ? parseIngestJobRow(row) : null;
+}
+
+export function getRunningIngestJobByNormalizedUrl(normalizedUrl: string): IngestJob | null {
+  const row = getRunningIngestJobByNormalizedUrlStmt.get(normalizedUrl);
   return row ? parseIngestJobRow(row) : null;
 }
 

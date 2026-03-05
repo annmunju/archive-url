@@ -4,11 +4,14 @@ import express from "express";
 import { z } from "zod";
 import {
   createIngestJob,
+  deleteDocumentById,
   getDocumentById,
   getIngestJobById,
   getIngestJobByIdempotencyKey,
+  getRunningIngestJobByNormalizedUrl,
   listDocuments,
   listIngestJobs,
+  updateDocumentById,
 } from "./db.js";
 import { bootstrapIngestWorker, enqueueIngestJob } from "./jobs.js";
 import type { IngestJob, IngestJobStatus } from "./types.js";
@@ -24,6 +27,45 @@ const ingestListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   status: z.enum(["queued", "running", "succeeded", "failed"]).optional(),
 });
+
+const documentsListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const patchDocumentSchema = z
+  .object({
+    title: z.string().min(1).max(300).optional(),
+    description: z.string().min(1).max(1000).optional(),
+    links: z
+      .array(
+        z.object({
+          url: z.string().url(),
+          content: z.string().min(1).max(500),
+        }),
+      )
+      .max(100)
+      .optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one field is required",
+  });
+
+function errorResponse(
+  code: string,
+  message: string,
+  retryable: boolean,
+  extra?: Record<string, unknown>,
+) {
+  return {
+    error: {
+      code,
+      message,
+      retryable,
+    },
+    ...(extra ?? {}),
+  };
+}
 
 function normalizeInputUrl(rawUrl: string): string {
   const noBackslashes = rawUrl.trim().replace(/\\+/g, "").replace(/%5C/gi, "");
@@ -50,20 +92,15 @@ function mapJobResponse(job: IngestJob) {
 }
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({ status: "ok" });
 });
 
 app.post("/ingest", (req, res) => {
   const parsed = ingestSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({
-      error: {
-        code: "INVALID_REQUEST_BODY",
-        message: "Invalid request body",
-        retryable: false,
-      },
-      issues: parsed.error.issues,
-    });
+    return res
+      .status(400)
+      .json(errorResponse("INVALID_REQUEST_BODY", "Invalid request body", false, { issues: parsed.error.issues }));
   }
 
   try {
@@ -82,6 +119,17 @@ app.post("/ingest", (req, res) => {
           },
         });
       }
+    }
+
+    const existingRunning = getRunningIngestJobByNormalizedUrl(normalizedUrl);
+    if (existingRunning) {
+      return res.status(202).json({
+        job: mapJobResponse(existingRunning),
+        links: {
+          self: `/ingest-jobs/${existingRunning.id}`,
+          document: existingRunning.document_id ? `/documents/${existingRunning.document_id}` : null,
+        },
+      });
     }
 
     const job = createIngestJob({
@@ -104,37 +152,21 @@ app.post("/ingest", (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     const isInvalidUrl = message.toLowerCase().includes("invalid url");
-    return res.status(isInvalidUrl ? 400 : 500).json({
-      error: {
-        code: isInvalidUrl ? "INVALID_URL" : "INTERNAL_ERROR",
-        message,
-        retryable: false,
-      },
-    });
+    return res
+      .status(isInvalidUrl ? 400 : 500)
+      .json(errorResponse(isInvalidUrl ? "INVALID_URL" : "INTERNAL_ERROR", message, false));
   }
 });
 
 app.get("/ingest-jobs/:id", (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
-    return res.status(400).json({
-      error: {
-        code: "INVALID_REQUEST_BODY",
-        message: "Invalid id",
-        retryable: false,
-      },
-    });
+    return res.status(400).json(errorResponse("INVALID_REQUEST_BODY", "Invalid id", false));
   }
 
   const job = getIngestJobById(id);
   if (!job) {
-    return res.status(404).json({
-      error: {
-        code: "JOB_NOT_FOUND",
-        message: "Job not found",
-        retryable: false,
-      },
-    });
+    return res.status(404).json(errorResponse("JOB_NOT_FOUND", "Job not found", false));
   }
 
   return res.json({
@@ -148,14 +180,9 @@ app.get("/ingest-jobs/:id", (req, res) => {
 app.get("/ingest-jobs", (req, res) => {
   const parsed = ingestListQuerySchema.safeParse(req.query);
   if (!parsed.success) {
-    return res.status(400).json({
-      error: {
-        code: "INVALID_REQUEST_BODY",
-        message: "Invalid query",
-        retryable: false,
-      },
-      issues: parsed.error.issues,
-    });
+    return res
+      .status(400)
+      .json(errorResponse("INVALID_REQUEST_BODY", "Invalid query", false, { issues: parsed.error.issues }));
   }
 
   const limit = parsed.data.limit ?? 20;
@@ -171,24 +198,66 @@ app.get("/ingest-jobs", (req, res) => {
 });
 
 app.get("/documents", (req, res) => {
-  const limit = Number(req.query.limit ?? "20");
-  const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 20;
-  const rows = listDocuments(safeLimit);
-  res.json(rows);
+  const parsed = documentsListQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json(errorResponse("INVALID_REQUEST_BODY", "Invalid query", false, { issues: parsed.error.issues }));
+  }
+
+  const limit = parsed.data.limit ?? 20;
+  const offset = parsed.data.offset ?? 0;
+  const rows = listDocuments(limit, offset);
+  res.json({ items: rows });
 });
 
 app.get("/documents/:id", (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
-    return res.status(400).json({ error: "Invalid id" });
+    return res.status(400).json(errorResponse("INVALID_REQUEST_BODY", "Invalid id", false));
   }
 
   const row = getDocumentById(id);
   if (!row) {
-    return res.status(404).json({ error: "Not found" });
+    return res.status(404).json(errorResponse("DOCUMENT_NOT_FOUND", "Document not found", false));
   }
 
-  return res.json(row);
+  return res.json({ document: row });
+});
+
+app.patch("/documents/:id", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json(errorResponse("INVALID_REQUEST_BODY", "Invalid id", false));
+  }
+
+  const parsed = patchDocumentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res
+      .status(400)
+      .json(errorResponse("INVALID_REQUEST_BODY", "Invalid request body", false, { issues: parsed.error.issues }));
+  }
+
+  const updated = updateDocumentById(id, parsed.data);
+  if (!updated) {
+    return res.status(404).json(errorResponse("DOCUMENT_NOT_FOUND", "Document not found", false));
+  }
+
+  return res.json({ document: updated });
+});
+
+app.delete("/documents/:id", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json(errorResponse("INVALID_REQUEST_BODY", "Invalid id", false));
+  }
+
+  const deleted = deleteDocumentById(id);
+  if (!deleted) {
+    return res.status(404).json(errorResponse("DOCUMENT_NOT_FOUND", "Document not found", false));
+  }
+
+  return res.status(204).send();
 });
 
 const port = Number(process.env.PORT ?? 3000);

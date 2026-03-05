@@ -11,7 +11,8 @@ import { ingestUrl } from "./pipeline.js";
 
 const queue: number[] = [];
 const queuedSet = new Set<number>();
-let workerRunning = false;
+const INGEST_CONCURRENCY = Math.max(1, Number(process.env.INGEST_CONCURRENCY ?? 1));
+let activeWorkers = 0;
 
 type JobError = {
   code: string;
@@ -23,30 +24,49 @@ function toJobError(error: unknown): JobError {
   const message = error instanceof Error ? error.message : "Unknown error";
   const lower = message.toLowerCase();
 
-  if (message.includes("Jina fetch failed") || lower.includes("fetch")) {
-    return { code: "JINA_FETCH_FAILED", retryable: true, message };
-  }
   if (lower.includes("invalid url")) {
     return { code: "INVALID_URL", retryable: false, message };
   }
+  if (lower.includes("failed") && lower.includes("normalize")) {
+    return { code: "NORMALIZE_FAILED", retryable: false, message };
+  }
+  if (message.includes("Jina fetch failed") || lower.includes("fetch")) {
+    return { code: "JINA_FETCH_FAILED", retryable: true, message };
+  }
   if (lower.includes("abort")) {
     return { code: "JINA_FETCH_FAILED", retryable: true, message };
+  }
+  if (lower.includes("extract")) {
+    return { code: "EXTRACT_FAILED", retryable: true, message };
+  }
+  if (lower.includes("summar")) {
+    return { code: "SUMMARIZE_FAILED", retryable: true, message };
+  }
+  if (lower.includes("sqlite") || lower.includes("constraint")) {
+    return { code: "PERSIST_FAILED", retryable: true, message };
   }
   return { code: "INTERNAL_ERROR", retryable: false, message };
 }
 
 async function runWorkerLoop() {
-  if (workerRunning) return;
-  workerRunning = true;
-
   while (queue.length > 0) {
     const id = queue.shift();
     if (!id) continue;
     queuedSet.delete(id);
     await processJob(id);
   }
+}
 
-  workerRunning = false;
+function kickWorkers() {
+  while (activeWorkers < INGEST_CONCURRENCY && queue.length > 0) {
+    activeWorkers += 1;
+    void runWorkerLoop().finally(() => {
+      activeWorkers -= 1;
+      if (queue.length > 0) {
+        kickWorkers();
+      }
+    });
+  }
 }
 
 async function processJob(id: number) {
@@ -74,7 +94,7 @@ export function enqueueIngestJob(jobId: number): void {
   if (queuedSet.has(jobId)) return;
   queuedSet.add(jobId);
   queue.push(jobId);
-  void runWorkerLoop();
+  kickWorkers();
 }
 
 export function bootstrapIngestWorker(): { recoveredRunning: number; queued: number } {
