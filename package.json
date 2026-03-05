@@ -9,10 +9,8 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@langchain/core": "^0.3.48",
     "@langchain/langgraph": "^0.2.39",
     "@langchain/openai": "^0.4.9",
-    "@wrtnlabs/web-content-extractor": "^3.2.4",
     "better-sqlite3": "^11.8.1",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
