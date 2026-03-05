@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { StyleSheet, Text, TextInput, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { createIngestJob } from "@/api/ingest";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import type { RootStackParamList } from "@/types/navigation";
@@ -48,7 +49,7 @@ export function HomeScreen() {
   };
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={["top"]}>
       <Text style={styles.title}>Snap URL</Text>
       <View style={[styles.inputCard, !!error && styles.errorBorder]}>
         <TextInput
@@ -63,7 +64,7 @@ export function HomeScreen() {
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <PrimaryButton label="수집 시작" onPress={onSubmit} disabled={!valid} loading={mutation.isPending} />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -72,7 +73,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingTop: 8,
     gap: spacing.medium,
   },
   title: {

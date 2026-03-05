@@ -1,7 +1,6 @@
 import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { FileText, Home } from "lucide-react-native";
 import { View, Text, StyleSheet } from "react-native";
 import type { RootStackParamList, TabParamList } from "@/types/navigation";
 import { colors, radius } from "@/theme/tokens";
@@ -22,13 +21,12 @@ function Tabs() {
         tabBarShowLabel: false,
         tabBarStyle: styles.tabBar,
         tabBarItemStyle: styles.tabItem,
+        tabBarIconStyle: styles.tabIconWrap,
         tabBarIcon: ({ focused }) => (
           <View style={[styles.tabPill, focused ? styles.tabPillActive : styles.tabPillInactive]}>
-            {route.name === "Home" ? (
-              <Home size={20} color={focused ? "#fff" : colors.textSecondary} />
-            ) : (
-              <FileText size={20} color={focused ? "#fff" : colors.textSecondary} />
-            )}
+            <Text style={[styles.tabIcon, focused ? styles.tabLabelActive : styles.tabLabelInactive]}>
+              {route.name === "Home" ? "⌂" : "▤"}
+            </Text>
             <Text style={[styles.tabLabel, focused ? styles.tabLabelActive : styles.tabLabelInactive]}>
               {route.name === "Home" ? "홈" : "문서"}
             </Text>
@@ -66,22 +64,34 @@ export function RootNavigator() {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: colors.border,
-    height: 74,
-    marginHorizontal: 20,
-    marginBottom: 20,
+    height: 62,
+    marginHorizontal: 21,
+    marginBottom: 21,
     borderRadius: radius.xl,
-    padding: 4,
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 4,
     borderTopWidth: 0,
     elevation: 0,
+    position: "absolute",
   },
   tabItem: {
-    height: 62,
+    margin: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    height: 54,
+  },
+  tabIconWrap: {
+    height: "100%",
+    width: "100%",
+    marginTop: 0,
+    marginBottom: 0,
   },
   tabPill: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 5,
     borderRadius: radius.lg,
     width: "100%",
     height: "100%",
@@ -92,9 +102,14 @@ const styles = StyleSheet.create({
   tabPillInactive: {
     backgroundColor: colors.card,
   },
+  tabIcon: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 17,
+    lineHeight: 20,
+  },
   tabLabel: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
+    fontSize: 15,
     letterSpacing: 0.5,
   },
   tabLabelActive: {

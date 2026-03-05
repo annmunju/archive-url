@@ -13,6 +13,7 @@ const dbPath = process.env.DB_PATH ?? "./data/snap-url.db";
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 const db = new Database(dbPath);
+db.pragma("foreign_keys = ON");
 db.pragma("journal_mode = WAL");
 
 db.exec(`
@@ -45,7 +46,7 @@ db.exec(`
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     started_at DATETIME,
     finished_at DATETIME,
-    FOREIGN KEY(document_id) REFERENCES documents(id)
+    FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE SET NULL
   );
 `);
 
@@ -93,6 +94,12 @@ const listStmt = db.prepare(`
 const deleteDocumentStmt = db.prepare(`
   DELETE FROM documents
   WHERE id = ?
+`);
+
+const clearIngestJobDocumentRefsStmt = db.prepare(`
+  UPDATE ingest_jobs
+  SET document_id = NULL
+  WHERE document_id = ?
 `);
 
 const createIngestJobStmt = db.prepare(`
@@ -335,7 +342,11 @@ export function updateDocumentById(
 }
 
 export function deleteDocumentById(id: number): boolean {
-  const info = deleteDocumentStmt.run(id);
+  const tx = db.transaction((documentId: number) => {
+    clearIngestJobDocumentRefsStmt.run(documentId);
+    return deleteDocumentStmt.run(documentId);
+  });
+  const info = tx(id);
   return info.changes > 0;
 }
 

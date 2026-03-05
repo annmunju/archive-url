@@ -4,6 +4,7 @@
   "private": true,
   "main": "expo/AppEntry",
   "scripts": {
+    "postinstall": "node scripts/patch-expo-header.js",
     "start": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",

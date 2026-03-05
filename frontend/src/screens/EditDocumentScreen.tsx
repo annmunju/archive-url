@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Plus, X } from "lucide-react-native";
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,11 +10,13 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { ApiError } from "@/api/client";
 import { getDocument, patchDocument } from "@/api/documents";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { colors, radius, spacing } from "@/theme/tokens";
 import type { RootStackParamList } from "@/types/navigation";
-import type { ExtractedLink } from "@/api/types";
+import type { DocumentListItem, ExtractedLink } from "@/api/types";
+import { cleanTitle, getListDescription } from "@/utils/text";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EditDocument">;
 
@@ -34,33 +36,77 @@ export function EditDocumentScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (!query.data) return;
-    setTitle(query.data.document.title);
-    setDescription(query.data.document.description);
+    const listLikeItem = {
+      id: query.data.document.id,
+      url: query.data.document.url,
+      title: query.data.document.title,
+      description: query.data.document.description,
+      summary: query.data.document.summary,
+      created_at: query.data.document.created_at,
+    };
+    setTitle(cleanTitle(query.data.document.title));
+    setDescription(getListDescription(listLikeItem));
     setLinks(query.data.document.links);
   }, [query.data]);
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      patchDocument(documentId, {
+    mutationFn: () => {
+      const sanitizedLinks = links
+        .map((link) => ({ url: link.url.trim(), content: link.content.trim() }))
+        .filter((link) => link.content.length > 0 && isHttpUrl(link.url));
+      return patchDocument(documentId, {
         title: title.trim(),
         description: description.trim(),
-        links,
-      }),
-    onSuccess: ({ document }) => {
+        links: sanitizedLinks,
+      });
+    },
+    onSuccess: async ({ document }) => {
       queryClient.setQueryData(["document", documentId], { document });
-      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.setQueriesData({ queryKey: ["documents"] }, (oldData: unknown) => {
+        if (!oldData || typeof oldData !== "object") return oldData;
+        const typed = oldData as {
+          pages?: Array<{ items: DocumentListItem[] }>;
+          pageParams?: unknown[];
+        };
+        if (!typed.pages) return oldData;
+
+        return {
+          ...typed,
+          pages: typed.pages.map((page) => ({
+            ...page,
+            items: page.items.map((item) =>
+              item.id === documentId
+                ? {
+                    ...item,
+                    title: document.title,
+                    description: document.description,
+                    summary: document.summary,
+                  }
+                : item,
+            ),
+          })),
+        };
+      });
+
+      await queryClient.invalidateQueries({ queryKey: ["document", documentId] });
+      await queryClient.invalidateQueries({ queryKey: ["documents"] });
+      await queryClient.refetchQueries({ queryKey: ["document", documentId], type: "all" });
+      await queryClient.refetchQueries({ queryKey: ["documents"], type: "all" });
+      Alert.alert("저장 완료", "문서를 수정했습니다.");
       navigation.goBack();
+    },
+    onError: (error) => {
+      const message =
+        error instanceof ApiError
+          ? `${error.message} (${error.code}/${error.status})`
+          : "수정 저장에 실패했습니다.";
+      Alert.alert("저장 실패", message);
     },
   });
 
   const canAddLink = useMemo(() => {
     if (!newUrl || !newContent) return false;
-    try {
-      const url = new URL(newUrl);
-      return url.protocol === "http:" || url.protocol === "https:";
-    } catch {
-      return false;
-    }
+    return isHttpUrl(newUrl);
   }, [newContent, newUrl]);
 
   const canSave = title.trim().length > 0 && description.trim().length > 0;
@@ -113,8 +159,7 @@ export function EditDocumentScreen({ route, navigation }: Props) {
         <View style={styles.linkHeader}>
           <Text style={styles.label}>관련 링크</Text>
           <Pressable style={styles.addButton} onPress={addLink} disabled={!canAddLink}>
-            <Plus size={16} color={colors.primary} />
-            <Text style={styles.addText}>추가</Text>
+            <Text style={styles.addText}>+ 추가</Text>
           </Pressable>
         </View>
         <TextInput value={newUrl} onChangeText={setNewUrl} style={styles.input} placeholder="https://example.com" />
@@ -131,7 +176,7 @@ export function EditDocumentScreen({ route, navigation }: Props) {
                 style={styles.removeButton}
                 onPress={() => setLinks((prev) => prev.filter((_, idx) => idx !== index))}
               >
-                <X size={16} color={colors.textSecondary} />
+                <Text style={styles.removeText}>×</Text>
               </Pressable>
             </View>
           ))}
@@ -249,4 +294,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  removeText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 18,
+    lineHeight: 20,
+    color: colors.textSecondary,
+  },
 });
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}

@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { DocumentListItem } from "@/api/types";
 import { colors, radius, spacing } from "@/theme/tokens";
 import { fromNow } from "@/utils/time";
+import { cleanTitle, getListDescription } from "@/utils/text";
 
 type Props = {
   item: DocumentListItem;
@@ -10,13 +11,15 @@ type Props = {
 
 export function DocumentCard({ item, onPress }: Props) {
   const domain = safeDomain(item.url);
+  const title = cleanTitle(item.title);
+  const description = getListDescription(item);
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <Text style={styles.title} numberOfLines={2}>
-        {item.title}
+        {title}
       </Text>
       <Text style={styles.description} numberOfLines={3}>
-        {item.description || item.summary}
+        {description}
       </Text>
       <View style={styles.metaRow}>
         <Text style={styles.metaText}>{domain}</Text>

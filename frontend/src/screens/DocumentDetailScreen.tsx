@@ -1,5 +1,6 @@
-import { useLayoutEffect } from "react";
+import { useCallback, useLayoutEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   Alert,
@@ -11,11 +12,12 @@ import {
   Text,
   View,
 } from "react-native";
-import { Share2 } from "lucide-react-native";
+import { ApiError } from "@/api/client";
 import { deleteDocument, getDocument } from "@/api/documents";
 import { colors, radius, spacing, typography } from "@/theme/tokens";
 import type { RootStackParamList } from "@/types/navigation";
 import { fromNow } from "@/utils/time";
+import { cleanTitle } from "@/utils/text";
 
 type Props = NativeStackScreenProps<RootStackParamList, "DocumentDetail">;
 
@@ -27,19 +29,34 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
     queryFn: () => getDocument(documentId),
   });
 
+  useFocusEffect(
+    useCallback(() => {
+      documentQuery.refetch();
+    }, [documentQuery]),
+  );
+
   const deleteMutation = useMutation({
     mutationFn: () => deleteDocument(documentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });
-      navigation.navigate("Tabs", { screen: "Documents" });
+      Alert.alert("삭제 완료", "문서를 삭제했습니다.");
+      navigation.replace("Tabs", { screen: "Documents" });
+    },
+    onError: (error) => {
+      const message =
+        error instanceof ApiError
+          ? `${error.message} (${error.code}/${error.status})`
+          : "삭제에 실패했습니다.";
+      Alert.alert("삭제 실패", message);
     },
   });
 
   useLayoutEffect(() => {
     navigation.setOptions({
+      headerBackTitleVisible: false,
       headerRight: () => (
         <Pressable style={styles.circleButton} onPress={() => shareUrl(documentQuery.data?.document.url)}>
-          <Share2 size={18} color={colors.textPrimary} />
+          <Text style={styles.shareText}>↗</Text>
         </Pressable>
       ),
     });
@@ -54,6 +71,8 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
   }
 
   const doc = documentQuery.data.document;
+  const title = cleanTitle(doc.title);
+  const description = doc.description?.trim() || doc.summary?.trim() || "설명이 없습니다.";
 
   const onDelete = () => {
     Alert.alert("문서 삭제", "정말 삭제하시겠습니까?", [
@@ -69,16 +88,24 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.actionRow}>
-        <Pressable style={styles.actionButton} onPress={() => navigation.navigate("EditDocument", { documentId })}>
+        <Pressable
+          style={[styles.actionButton, deleteMutation.isPending && styles.actionButtonDisabled]}
+          onPress={() => navigation.navigate("EditDocument", { documentId })}
+          disabled={deleteMutation.isPending}
+        >
           <Text style={styles.actionText}>수정</Text>
         </Pressable>
-        <Pressable style={styles.actionButton} onPress={onDelete}>
+        <Pressable
+          style={[styles.actionButton, deleteMutation.isPending && styles.actionButtonDisabled]}
+          onPress={onDelete}
+          disabled={deleteMutation.isPending}
+        >
           <Text style={styles.actionText}>삭제</Text>
         </Pressable>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.title}>{doc.title}</Text>
+        <Text style={styles.title}>{title}</Text>
         <Text style={styles.link} onPress={() => openUrl(doc.url)}>
           {doc.url}
         </Text>
@@ -86,8 +113,8 @@ export function DocumentDetailScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>요약</Text>
-        <Text style={styles.body}>{doc.summary}</Text>
+        <Text style={styles.sectionTitle}>설명</Text>
+        <Text style={styles.body}>{description}</Text>
       </View>
 
       <View style={styles.section}>
@@ -147,6 +174,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  shareText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 18,
+    color: colors.textPrimary,
+    lineHeight: 20,
+  },
   actionRow: {
     flexDirection: "row",
     gap: spacing.medium,
@@ -158,6 +191,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
+  },
+  actionButtonDisabled: {
+    opacity: 0.55,
   },
   actionText: {
     fontFamily: "Inter_600SemiBold",

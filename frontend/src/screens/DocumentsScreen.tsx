@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation } from "@react-navigation/native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
-import { RefreshCw } from "lucide-react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { listDocuments } from "@/api/documents";
 import { CategoryChips } from "@/components/CategoryChips";
 import { DocumentCard } from "@/components/DocumentCard";
@@ -16,6 +17,8 @@ type DocsNavigation = NativeStackNavigationProp<RootStackParamList>;
 
 export function DocumentsScreen() {
   const navigation = useNavigation<DocsNavigation>();
+  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [category, setCategory] = useState<Category>("all");
 
@@ -36,14 +39,14 @@ export function DocumentsScreen() {
   const filtered = useMemo(() => applyCategoryFilter(allItems, category), [allItems, category]);
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={["top"]}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>내 문서</Text>
         <Pressable
           style={styles.refreshButton}
           onPress={() => queryClient.invalidateQueries({ queryKey: ["documents"] })}
         >
-          <RefreshCw size={20} color={colors.textPrimary} />
+          <Text style={styles.refreshText}>↻</Text>
         </Pressable>
       </View>
       <Text style={styles.categoryLabel}>카테고리</Text>
@@ -52,7 +55,7 @@ export function DocumentsScreen() {
       <FlatList
         data={filtered}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[styles.listContainer, { paddingBottom: tabBarHeight + insets.bottom + 20 }]}
         renderItem={({ item }) => (
           <DocumentCard
             item={item}
@@ -69,7 +72,7 @@ export function DocumentsScreen() {
         }
         ListEmptyComponent={<Text style={styles.empty}>문서가 없습니다.</Text>}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -78,7 +81,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: 24,
-    paddingTop: 20,
+    paddingTop: 14,
     gap: spacing.medium,
   },
   headerRow: {
@@ -98,6 +101,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  refreshText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 22,
+    color: colors.textPrimary,
+    lineHeight: 24,
+  },
   categoryLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
@@ -105,7 +114,6 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     gap: spacing.medium,
-    paddingBottom: 120,
   },
   empty: {
     paddingTop: spacing.large,
