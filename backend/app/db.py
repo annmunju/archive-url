@@ -30,6 +30,7 @@ class DB:
                     content TEXT NOT NULL,
                     summary TEXT NOT NULL,
                     category_key TEXT NOT NULL DEFAULT 'uncategorized',
+                    is_pinned INTEGER NOT NULL DEFAULT 0,
                     links TEXT NOT NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );
@@ -61,6 +62,7 @@ class DB:
                 """
             )
             self._ensure_documents_category_column()
+            self._ensure_documents_is_pinned_column()
             self._conn.commit()
 
     def _ensure_documents_category_column(self):
@@ -75,6 +77,13 @@ class DB:
             "UPDATE documents SET category_key = 'uncategorized' WHERE category_key IS NULL OR category_key = ''"
         )
 
+    def _ensure_documents_is_pinned_column(self):
+        columns = self._conn.execute("PRAGMA table_info(documents)").fetchall()
+        names = {column["name"] for column in columns}
+        if "is_pinned" in names:
+            return
+        self._conn.execute("ALTER TABLE documents ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
+
     @staticmethod
     def _parse_document_row(row: Optional[sqlite3.Row]) -> Optional[dict[str, Any]]:
         if row is None:
@@ -87,6 +96,7 @@ class DB:
             "content": row["content"],
             "summary": row["summary"],
             "category_key": row["category_key"],
+            "is_pinned": bool(row["is_pinned"]),
             "links": json.loads(row["links"]),
             "created_at": row["created_at"],
         }
@@ -100,6 +110,7 @@ class DB:
             "description": row["description"],
             "summary": row["summary"],
             "category_key": row["category_key"],
+            "is_pinned": bool(row["is_pinned"]),
             "created_at": row["created_at"],
         }
 
@@ -151,7 +162,7 @@ class DB:
             )
             row = self._conn.execute(
                 """
-                SELECT id, url, title, description, content, summary, category_key, links, created_at
+                SELECT id, url, title, description, content, summary, category_key, is_pinned, links, created_at
                 FROM documents
                 WHERE url = ?
                 """,
@@ -166,7 +177,7 @@ class DB:
         with self._lock:
             row = self._conn.execute(
                 """
-                SELECT id, url, title, description, content, summary, category_key, links, created_at
+                SELECT id, url, title, description, content, summary, category_key, is_pinned, links, created_at
                 FROM documents
                 WHERE id = ?
                 """,
@@ -178,9 +189,9 @@ class DB:
         with self._lock:
             rows = self._conn.execute(
                 """
-                SELECT id, url, title, description, summary, category_key, created_at
+                SELECT id, url, title, description, summary, category_key, is_pinned, created_at
                 FROM documents
-                ORDER BY id DESC
+                ORDER BY is_pinned DESC, id DESC
                 LIMIT ?
                 OFFSET ?
                 """,
@@ -201,6 +212,9 @@ class DB:
         if patch.get("links") is not None:
             sets.append("links = ?")
             params.append(json.dumps(patch["links"]))
+        if patch.get("is_pinned") is not None:
+            sets.append("is_pinned = ?")
+            params.append(1 if patch["is_pinned"] else 0)
 
         if not sets:
             return self.get_document_by_id(doc_id)
@@ -215,7 +229,7 @@ class DB:
                 return None
             row = self._conn.execute(
                 """
-                SELECT id, url, title, description, content, summary, category_key, links, created_at
+                SELECT id, url, title, description, content, summary, category_key, is_pinned, links, created_at
                 FROM documents
                 WHERE id = ?
                 """,

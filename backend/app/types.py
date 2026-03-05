@@ -36,9 +36,10 @@ class PatchDocumentRequest(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=300)
     description: Optional[str] = Field(default=None, min_length=1, max_length=1000)
     links: Optional[list[ExtractedLink]] = Field(default=None, max_length=100)
+    is_pinned: Optional[bool] = None
 
     @model_validator(mode="after")
     def at_least_one_field(self):
-        if self.title is None and self.description is None and self.links is None:
+        if self.title is None and self.description is None and self.links is None and self.is_pinned is None:
             raise ValueError("At least one field is required")
         return self

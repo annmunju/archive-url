@@ -6,7 +6,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { deleteDocument, listCategories, listDocuments } from "@/api/documents";
+import { deleteDocument, listCategories, listDocuments, patchDocument } from "@/api/documents";
 import { CategoryChips } from "@/components/CategoryChips";
 import { SwipeableDocumentCard } from "@/components/SwipeableDocumentCard";
 import { colors, spacing, typography } from "@/theme/tokens";
@@ -27,6 +27,31 @@ function removeDocumentFromPages(data: InfiniteData<DocumentsPage> | undefined, 
       items: page.items.filter((item) => item.id !== targetId),
     })),
   };
+}
+
+function togglePinnedInPages(data: InfiniteData<DocumentsPage> | undefined, targetId: number) {
+  if (!data) return data;
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      items: page.items.map((item) =>
+        item.id === targetId
+          ? {
+              ...item,
+              is_pinned: !item.is_pinned,
+            }
+          : item,
+      ),
+    })),
+  };
+}
+
+function sortPinnedFirst(items: DocumentListItem[]): DocumentListItem[] {
+  return [...items].sort((a, b) => {
+    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+    return b.id - a.id;
+  });
 }
 
 export function DocumentsScreen() {
@@ -102,6 +127,28 @@ export function DocumentsScreen() {
     },
   });
 
+  const pinMutation = useMutation({
+    mutationFn: async ({ documentId, nextPinned }: { documentId: number; nextPinned: boolean }) =>
+      patchDocument(documentId, { is_pinned: nextPinned }),
+    onMutate: async ({ documentId }) => {
+      await queryClient.cancelQueries({ queryKey: ["documents"] });
+      const previous = queryClient.getQueryData<InfiniteData<DocumentsPage>>(["documents"]);
+      queryClient.setQueryData<InfiniteData<DocumentsPage>>(["documents"], (current) =>
+        togglePinnedInPages(current, documentId),
+      );
+      return { previous };
+    },
+    onError: (error, _input, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["documents"], context.previous);
+      }
+      Alert.alert("고정 변경 실패", error instanceof Error ? error.message : "고정 상태 변경에 실패했습니다.");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+  });
+
   const allItems = useMemo(
     () => query.data?.pages.flatMap((page) => page.items) ?? [],
     [query.data?.pages],
@@ -121,7 +168,10 @@ export function DocumentsScreen() {
     setCategory(ALL_CATEGORY_KEY);
   }, [category, categoryOptions]);
 
-  const filtered = useMemo(() => applyCategoryFilter(allItems, category), [allItems, category]);
+  const filtered = useMemo(
+    () => sortPinnedFirst(applyCategoryFilter(allItems, category)),
+    [allItems, category],
+  );
 
   const handleSwipeableOpen = (close: () => void) => {
     if (openedSwipeableRef.current && openedSwipeableRef.current !== close) {
@@ -131,8 +181,13 @@ export function DocumentsScreen() {
   };
 
   const handleDelete = (item: DocumentListItem) => {
-    if (deleteMutation.isPending) return;
+    if (deleteMutation.isPending || pinMutation.isPending) return;
     deleteMutation.mutate(item.id);
+  };
+
+  const handleTogglePin = (item: DocumentListItem) => {
+    if (deleteMutation.isPending || pinMutation.isPending) return;
+    pinMutation.mutate({ documentId: item.id, nextPinned: !item.is_pinned });
   };
 
   return (
@@ -161,7 +216,8 @@ export function DocumentsScreen() {
             item={item}
             onSwipeableOpen={handleSwipeableOpen}
             onDelete={() => handleDelete(item)}
-            disabled={deleteMutation.isPending}
+            onTogglePin={() => handleTogglePin(item)}
+            disabled={deleteMutation.isPending || pinMutation.isPending}
             onPress={() => navigation.navigate("DocumentDetail", { documentId: item.id })}
           />
         )}
@@ -208,7 +264,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     fontSize: 22,
     color: colors.textPrimary,
-    lineHeight: 24,
+    lineHeight: 28,
   },
   categoryLabel: {
     fontFamily: "Inter_600SemiBold",

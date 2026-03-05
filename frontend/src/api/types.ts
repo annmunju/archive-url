@@ -39,6 +39,7 @@ export type DocumentListItem = {
   description: string;
   summary: string;
   category_key: string;
+  is_pinned: boolean;
   created_at: string;
 };
 
@@ -50,6 +51,7 @@ export type Document = {
   content: string;
   summary: string;
   category_key: string;
+  is_pinned: boolean;
   links: ExtractedLink[];
   created_at: string;
 };

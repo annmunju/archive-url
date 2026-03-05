@@ -12,10 +12,39 @@ export function cleanSummary(raw: string): string {
   return raw.replace(/\r/g, "").trim();
 }
 
+function extractCoreLineFromSummary(summary: string): string | null {
+  const lines = summary
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+
+  const firstSectionIndex = lines.findIndex((line) => /^1[\)\.\-:]/.test(line));
+  if (firstSectionIndex < 0) {
+    return null;
+  }
+
+  const firstLine = lines[firstSectionIndex];
+  const inline = firstLine
+    .replace(/^1[\)\.\-:]\s*/u, "")
+    .replace(/^한\s*줄\s*핵심\s*[:：-]?\s*/u, "")
+    .trim();
+  if (inline) {
+    return inline;
+  }
+
+  const nextLine = lines[firstSectionIndex + 1];
+  if (!nextLine || /^\d[\)\.\-:]/.test(nextLine)) {
+    return null;
+  }
+  return nextLine.replace(/^[-•]\s*/u, "").trim() || null;
+}
+
 export function getListDescription(item: DocumentListItem): string {
   const description = item.description?.trim() ?? "";
   if (!description || JINA_MIRROR_REGEX.test(description)) {
-    return cleanSummary(item.summary);
+    const summary = cleanSummary(item.summary);
+    return extractCoreLineFromSummary(summary) ?? summary;
   }
   return description;
 }

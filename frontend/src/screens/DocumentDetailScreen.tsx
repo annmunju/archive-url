@@ -190,9 +190,9 @@ const styles = StyleSheet.create({
   },
   shareText: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 18,
+    fontSize: 22,
     color: colors.textPrimary,
-    lineHeight: 20,
+    lineHeight: 28,
   },
   actionRow: {
     flexDirection: "row",

@@ -233,6 +233,7 @@ async def patch_document(doc_id: int, body: PatchDocumentRequest):
             "title": body.title,
             "description": body.description,
             "links": [link.model_dump(mode="json") for link in body.links] if body.links is not None else None,
+            "is_pinned": body.is_pinned,
         },
     )
     if not updated:

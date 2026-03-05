@@ -17,6 +17,7 @@ type PatchDocumentPayload = {
   title?: string;
   description?: string;
   links?: ExtractedLink[];
+  is_pinned?: boolean;
 };
 
 export async function listDocuments(limit: number, offset: number): Promise<ListDocumentsResponse> {
