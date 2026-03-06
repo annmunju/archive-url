@@ -204,10 +204,13 @@ export function DocumentsScreen() {
           <Text style={styles.refreshText}>↻</Text>
         </Pressable>
       </View>
-      <Text style={styles.categoryLabel}>카테고리</Text>
-      <CategoryChips options={categoryOptions} value={category} onChange={setCategory} />
+      <View style={styles.categorySection}>
+        <Text style={styles.categoryLabel}>카테고리</Text>
+        <CategoryChips options={categoryOptions} value={category} onChange={setCategory} />
+      </View>
 
       <FlatList
+        style={styles.list}
         data={filtered}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={[styles.listContainer, { paddingBottom: tabBarHeight + insets.bottom + 20 }]}
@@ -270,6 +273,13 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     fontSize: 15,
     color: colors.textPrimary,
+  },
+  categorySection: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  list: {
+    flex: 1,
   },
   listContainer: {
     paddingTop: spacing.small,

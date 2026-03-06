@@ -2,6 +2,7 @@
   "expo": {
     "name": "Snap URL",
     "slug": "snap-url",
+    "newArchEnabled": true,
     "scheme": "snapurl",
     "version": "1.0.0",
     "orientation": "portrait",

@@ -1,21 +1,10 @@
-# snap-url (Monorepo)
+# snap-url Quick Start
 
-AI 기반 URL 수집/정리/요약 서비스 모노레포입니다.
+모노레포 구성:
+- `backend/`: FastAPI + SQLite
+- `frontend/`: Expo(React Native) 앱
 
-## 디렉터리 구조
-- `backend/`: Python + FastAPI API 서버
-- `frontend/`: iOS/UI 클라이언트 작업 폴더
-- `docs/`: 공통 문서 및 명세
-
-## 현재 백엔드 기능
-- URL 입력
-- URL 정규화(깨진 백슬래시/인코딩 보정)
-- `https://r.jina.ai/http://원본URL` 방식으로 마크다운 수집
-- 수집된 마크다운에서 본문/링크 추출
-- LangGraph 파이프라인으로 요약 생성
-- SQLite DB에 원문 메타데이터 + 요약 + 링크 저장
-
-## 백엔드 실행
+## 1) 백엔드 빠른 시작
 ```bash
 cd backend
 cp .env.example .env
@@ -25,35 +14,48 @@ pip install -r requirements.txt
 python run.py
 ```
 
-## 프론트엔드(iOS 앱) 실행
+확인:
+```bash
+curl http://127.0.0.1:3000/health
+```
+정상 응답:
+```json
+{"status":"ok"}
+```
+
+## 2) 프론트엔드 빠른 시작
+권장 환경:
+- Node.js `20.19+`
+- Expo SDK `54`
+
 ```bash
 cd frontend
 npm install
-npm run start
+cp .env.example .env
 ```
 
-iOS 시뮬레이터 실행:
+`.env`에서 백엔드 주소 설정:
+```env
+EXPO_PUBLIC_API_BASE_URL=http://<YOUR_MAC_IP>:3000
+```
+
+실행:
 ```bash
-cd frontend
-npm run ios
+npx expo start -c
 ```
 
-## 백엔드 환경변수
-- `OPENAI_API_KEY`: 설정 시 LLM 요약 사용
-- `OPENAI_MODEL`: 기본 `gpt-4o-mini`
-- `PORT`: 기본 `3000`
-- `DB_PATH`: 기본 `./data/snap-url.db`
-- `JINA_FETCH_TIMEOUT_MS`: 기본 `20000`
+## 3) 실제 단말기(휴대폰) 확인 방법
+1. 휴대폰에 `Expo Go` 설치
+2. 휴대폰과 맥을 같은 Wi-Fi에 연결
+3. 맥 IP 확인:
+```bash
+ipconfig getifaddr en0
+```
+4. `frontend/.env`의 `EXPO_PUBLIC_API_BASE_URL`를 `http://<맥IP>:3000`으로 설정
+5. 백엔드 실행(`python run.py`) 상태 유지
+6. 프론트 실행(`npx expo start -c`) 후 QR 스캔
+7. 휴대폰 브라우저에서 `http://<맥IP>:3000/health`가 열리면 네트워크 연결 정상
 
-`OPENAI_API_KEY`가 없으면 fallback 요약(본문 축약)으로 동작합니다.
-
-## 백엔드 API(현재 구현)
-- `POST /ingest` (비동기 Job 생성, `202 Accepted`)
-- `GET /ingest-jobs`
-- `GET /ingest-jobs/:id`
-- `GET /documents`
-- `GET /documents/:id`
-- `GET /health`
-
-## 문서
-- 비동기 ingest/status v1 명세: `docs/backend-async-ingest-spec-v1.md`
+## 4) 문서
+- 백엔드 API: `docs/backend-async-ingest-spec-v1.md`
+- 앱 구현 명세: `docs/app-design-spec.md`

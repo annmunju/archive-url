@@ -31,11 +31,13 @@ export function CategoryChips({ options, value, onChange }: Props) {
 const styles = StyleSheet.create({
   container: {
     gap: 8,
+    paddingVertical: 2,
   },
   chip: {
-    height: 32,
+    minHeight: 34,
     borderRadius: radius.md,
     paddingHorizontal: 16,
+    paddingVertical: 6,
     alignItems: "center",
     justifyContent: "center",
   },

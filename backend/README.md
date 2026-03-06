@@ -5,7 +5,7 @@ Node/TypeScript 백엔드와 동일한 API 계약을 목표로 한 Python 포트
 ## 실행
 
 ```bash
-cd backend_py
+cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
