@@ -1,4 +1,4 @@
-import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import { NavigationContainer, DefaultTheme, type LinkingOptions } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View, Text, StyleSheet } from "react-native";
@@ -11,6 +11,22 @@ import { EditDocumentScreen } from "@/screens/EditDocumentScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
+
+const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: ["snapurl://", "com.snapurl.app://"],
+  config: {
+    screens: {
+      Tabs: {
+        screens: {
+          Home: "ingest-from-share",
+          Documents: "documents",
+        },
+      },
+      DocumentDetail: "documents/:documentId",
+      EditDocument: "documents/:documentId/edit",
+    },
+  },
+};
 
 function Tabs() {
   return (
@@ -42,6 +58,7 @@ function Tabs() {
 export function RootNavigator() {
   return (
     <NavigationContainer
+      linking={linking}
       theme={{
         ...DefaultTheme,
         colors: {

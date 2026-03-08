@@ -1,4 +1,4 @@
-# Snap URL App Spec (Current Implementation)
+# ARCHIVE-URL App Spec (Current Implementation)
 
 작성일: 2026-03-06  
 대상 구현: `frontend/` (Expo SDK 54, React Native)

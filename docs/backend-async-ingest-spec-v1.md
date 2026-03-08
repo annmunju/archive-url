@@ -1,4 +1,4 @@
-# Snap URL Backend API Spec (Current Implementation)
+# ARCHIVE-URL Backend API Spec (Current Implementation)
 
 작성일: 2026-03-06  
 대상 구현: `backend/` (Python + FastAPI + SQLite)

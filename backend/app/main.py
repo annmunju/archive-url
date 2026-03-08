@@ -75,7 +75,7 @@ async def startup_event():
         print(
             f"ingest worker bootstrapped: recoveredRunning={boot['recoveredRunning']}, queued={boot['queued']}"
         )
-    print(f"snap-url API listening on port {settings.port}")
+    print(f"archive-url API listening on port {settings.port}")
 
 
 @app.get("/health")

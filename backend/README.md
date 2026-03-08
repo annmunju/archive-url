@@ -1,4 +1,4 @@
-# snap-url Python backend
+# ARCHIVE-URL Python backend
 
 Node/TypeScript 백엔드와 동일한 API 계약을 목표로 한 Python 포트입니다.
 

@@ -1,16 +1,20 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { createIngestJob, listIngestJobs } from "@/api/ingest";
-import type { IngestJobListItem, IngestJobStatus } from "@/api/types";
+import type { IngestJob, IngestJobListItem, IngestJobStatus } from "@/api/types";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { consumePendingSharedUrl } from "@/native/sharedIngest";
 import { colors, radius, spacing, typography } from "@/theme/tokens";
 import { fromNow } from "@/utils/time";
 
 const INGEST_ACTIVE_LIST_LIMIT = 100;
+const INGEST_RECENT_LIST_LIMIT = 100;
 const INGEST_LIST_POLL_MS = 5000;
 const INGEST_JOBS_QUERY_KEY = ["ingestJobs"] as const;
+const RECENT_FINISHED_WINDOW_MS = 30 * 60 * 1000;
 
 const ACTIVE_STATUSES: IngestJobStatus[] = ["queued", "running"];
 const ACTIVE_STATUS_PRIORITY: Record<IngestJobStatus, number> = {
@@ -19,6 +23,26 @@ const ACTIVE_STATUS_PRIORITY: Record<IngestJobStatus, number> = {
   failed: 2,
   succeeded: 3,
 };
+
+function toIngestJobListItem(job: IngestJob): IngestJobListItem {
+  return {
+    id: job.id,
+    normalized_url: job.normalized_url ?? job.raw_url,
+    status: job.status,
+    document_id: job.document_id,
+    error_code: job.error_code,
+    error_message: job.error_message,
+    updated_at: job.updated_at,
+  };
+}
+
+function upsertJob(
+  items: IngestJobListItem[] | undefined,
+  nextItem: IngestJobListItem,
+): IngestJobListItem[] {
+  const deduped = (items ?? []).filter((item) => item.id !== nextItem.id);
+  return [nextItem, ...deduped].sort((a, b) => b.id - a.id);
+}
 
 function isValidUrl(value: string) {
   try {
@@ -32,20 +56,86 @@ function isValidUrl(value: string) {
 export function HomeScreen() {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const [recentJobs, setRecentJobs] = useState<IngestJobListItem[]>([]);
+  const [selectedPanel, setSelectedPanel] = useState<"active" | "recent">("active");
+  const recentJobTimeoutsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const submitUrlRef = useRef<(rawUrl: string) => void>(() => undefined);
+  const queuedRefetchRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
+  const runningRefetchRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
+  const latestRefetchRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
   const queryClient = useQueryClient();
   const valid = isValidUrl(url);
 
+  useEffect(() => {
+    const timeoutHandles = recentJobTimeoutsRef.current;
+    return () => {
+      timeoutHandles.forEach((handle) => clearTimeout(handle));
+      timeoutHandles.clear();
+    };
+  }, []);
+
   const mutation = useMutation({
     mutationFn: (rawUrl: string) => createIngestJob(rawUrl),
-    onSuccess: () => {
+    onSuccess: async (response) => {
       setUrl("");
       setError("");
-      queryClient.invalidateQueries({ queryKey: INGEST_JOBS_QUERY_KEY });
+      const nextItem = toIngestJobListItem(response.job);
+      setRecentJobs((current) => upsertJob(current, nextItem));
+      const existingTimeout = recentJobTimeoutsRef.current.get(nextItem.id);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+      recentJobTimeoutsRef.current.set(
+        nextItem.id,
+        setTimeout(() => {
+          setRecentJobs((current) => current.filter((item) => item.id !== nextItem.id));
+          recentJobTimeoutsRef.current.delete(nextItem.id);
+        }, 15000),
+      );
+
+      if (nextItem.status === "queued" || nextItem.status === "running") {
+        queryClient.setQueryData<{ items: IngestJobListItem[] }>(
+          [...INGEST_JOBS_QUERY_KEY, nextItem.status, INGEST_ACTIVE_LIST_LIMIT],
+          (current) => ({
+            items: upsertJob(current?.items, nextItem),
+          }),
+        );
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: INGEST_JOBS_QUERY_KEY }),
+        queryClient.refetchQueries({
+          queryKey: [...INGEST_JOBS_QUERY_KEY, "queued", INGEST_ACTIVE_LIST_LIMIT],
+          exact: true,
+        }),
+        queryClient.refetchQueries({
+          queryKey: [...INGEST_JOBS_QUERY_KEY, "running", INGEST_ACTIVE_LIST_LIMIT],
+          exact: true,
+        }),
+      ]);
     },
     onError: (err: Error) => {
       setError(err.message);
     },
   });
+
+  const submitUrl = useCallback(
+    (rawUrl: string) => {
+      if (mutation.isPending) {
+        return;
+      }
+
+      if (!isValidUrl(rawUrl)) {
+        setError("유효한 URL을 입력해 주세요.");
+        return;
+      }
+
+      setError("");
+      setUrl(rawUrl);
+      mutation.mutate(rawUrl);
+    },
+    [mutation],
+  );
 
   const queuedJobsQuery = useQuery({
     queryKey: [...INGEST_JOBS_QUERY_KEY, "queued", INGEST_ACTIVE_LIST_LIMIT],
@@ -63,9 +153,20 @@ export function HomeScreen() {
     refetchOnWindowFocus: false,
   });
 
+  const latestJobsQuery = useQuery({
+    queryKey: [...INGEST_JOBS_QUERY_KEY, "latest", INGEST_RECENT_LIST_LIMIT],
+    queryFn: () => listIngestJobs(INGEST_RECENT_LIST_LIMIT),
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+  });
+
   const activeJobs = useMemo(
     () => {
-      const merged = [...(queuedJobsQuery.data?.items ?? []), ...(runningJobsQuery.data?.items ?? [])];
+      const merged = [
+        ...recentJobs,
+        ...(queuedJobsQuery.data?.items ?? []),
+        ...(runningJobsQuery.data?.items ?? []),
+      ];
       const deduped = new Map<number, IngestJobListItem>();
       for (const item of merged) {
         if (ACTIVE_STATUSES.includes(item.status)) {
@@ -80,68 +181,205 @@ export function HomeScreen() {
         return b.id - a.id;
       });
     },
-    [queuedJobsQuery.data?.items, runningJobsQuery.data?.items],
+    [recentJobs, queuedJobsQuery.data?.items, runningJobsQuery.data?.items],
+  );
+
+  const recentFinishedJobs = useMemo(
+    () =>
+      (latestJobsQuery.data?.items ?? []).filter((item) => {
+        const normalized = item.updated_at.includes("T") ? item.updated_at : item.updated_at.replace(" ", "T");
+        const withTimezone = /[zZ]|[+-]\d{2}:\d{2}$/.test(normalized) ? normalized : `${normalized}Z`;
+        const updatedAt = Date.parse(withTimezone);
+        if (Number.isNaN(updatedAt)) {
+          return false;
+        }
+
+        return Date.now() - updatedAt <= RECENT_FINISHED_WINDOW_MS;
+      }),
+    [latestJobsQuery.data?.items],
   );
 
   const onSubmit = () => {
-    if (!valid) {
-      setError("유효한 URL을 입력해 주세요.");
-      return;
-    }
-    setError("");
-    mutation.mutate(url);
+    submitUrl(url);
   };
+
+  const panelCount = selectedPanel === "active" ? activeJobs.length : recentFinishedJobs.length;
+  const panelIsLoading =
+    selectedPanel === "active" ? queuedJobsQuery.isLoading || runningJobsQuery.isLoading : latestJobsQuery.isLoading;
+  const panelIsError =
+    selectedPanel === "active" ? queuedJobsQuery.isError || runningJobsQuery.isError : latestJobsQuery.isError;
+  const panelItems = selectedPanel === "active" ? activeJobs : recentFinishedJobs;
+  const panelIsRefreshing =
+    selectedPanel === "active"
+      ? (queuedJobsQuery.isRefetching || runningJobsQuery.isRefetching) &&
+        !(queuedJobsQuery.isLoading || runningJobsQuery.isLoading)
+      : latestJobsQuery.isRefetching && !latestJobsQuery.isLoading;
+  const panelEmptyText =
+    selectedPanel === "active"
+      ? "진행 중인 요청이 없습니다."
+      : "최근 30분 내 요청이 없습니다.";
+
+  const refreshPanel = useCallback(() => {
+    if (selectedPanel === "active") {
+      void Promise.all([queuedJobsQuery.refetch(), runningJobsQuery.refetch()]);
+    } else {
+      void latestJobsQuery.refetch();
+    }
+  }, [latestJobsQuery, queuedJobsQuery, runningJobsQuery, selectedPanel]);
+
+  useEffect(() => {
+    submitUrlRef.current = submitUrl;
+    queuedRefetchRef.current = queuedJobsQuery.refetch;
+    runningRefetchRef.current = runningJobsQuery.refetch;
+    latestRefetchRef.current = latestJobsQuery.refetch;
+  }, [latestJobsQuery.refetch, queuedJobsQuery.refetch, runningJobsQuery.refetch, submitUrl]);
+
+  useEffect(() => {
+    let syncing = false;
+
+    const syncFromSharedEntry = async () => {
+      if (syncing) {
+        return;
+      }
+
+      syncing = true;
+      try {
+        await Promise.all([
+          queuedRefetchRef.current(),
+          runningRefetchRef.current(),
+          latestRefetchRef.current(),
+        ]);
+
+        const sharedUrl = await consumePendingSharedUrl();
+        if (sharedUrl) {
+          submitUrlRef.current(sharedUrl);
+        }
+      } catch {
+        setError("공유된 링크를 불러오지 못했습니다.");
+      } finally {
+        syncing = false;
+      }
+    };
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void syncFromSharedEntry();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+
+      const syncPendingSharedUrl = async () => {
+        try {
+          const sharedUrl = await consumePendingSharedUrl();
+          if (!cancelled && sharedUrl) {
+            submitUrlRef.current(sharedUrl);
+          }
+        } catch {
+          if (!cancelled) {
+            setError("공유된 링크를 불러오지 못했습니다.");
+          }
+        }
+      };
+
+      void Promise.all([
+        queuedRefetchRef.current(),
+        runningRefetchRef.current(),
+        latestRefetchRef.current(),
+      ]);
+      void syncPendingSharedUrl();
+
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>Capture once, review later</Text>
-        <Text style={styles.title}>ARCHIVE-URL</Text>
-      </View>
-
-      <View style={styles.composeSection}>
-        <Text style={styles.composeLabel}>수집 요청</Text>
-        <View style={[styles.inputCard, !!error && styles.errorBorder]}>
-          <TextInput
-            placeholder="https://example.com"
-            placeholderTextColor={colors.textSecondary}
-            value={url}
-            onChangeText={setUrl}
-            keyboardType="url"
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={styles.input}
-          />
+      <View style={styles.headerContent}>
+        <View style={styles.hero}>
+          <Text style={styles.eyebrow}>Capture once, review later</Text>
+          <Text style={styles.title}>ARCHIVE-URL</Text>
         </View>
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        <PrimaryButton label="수집 시작" onPress={onSubmit} disabled={!valid} loading={mutation.isPending} />
-      </View>
 
-      <View style={styles.jobsSection}>
-        <View style={styles.jobsHeading}>
-          <Text style={styles.jobsTitle}>진행 중인 요청</Text>
-          <Text style={styles.jobsCount}>{activeJobs.length}</Text>
-        </View>
-        {queuedJobsQuery.isLoading || runningJobsQuery.isLoading ? (
-          <Text style={styles.jobsMeta}>불러오는 중...</Text>
-        ) : null}
-        {queuedJobsQuery.isError || runningJobsQuery.isError ? (
-          <Text style={styles.jobsError}>요청 현황을 불러오지 못했습니다.</Text>
-        ) : null}
-        {!queuedJobsQuery.isLoading &&
-        !runningJobsQuery.isLoading &&
-        !queuedJobsQuery.isError &&
-        !runningJobsQuery.isError &&
-        activeJobs.length === 0 ? (
-          <Text style={styles.jobsMeta}>진행 중인 요청이 없습니다.</Text>
-        ) : null}
-        {activeJobs.length > 0 ? (
-          <View style={styles.activityBlock}>
-            {activeJobs.map((item, index) => (
-              <IngestJobRow key={item.id} item={item} isFirst={index === 0} />
-            ))}
+        <View style={styles.composeSection}>
+          <Text style={styles.composeLabel}>수집 요청</Text>
+          <View style={[styles.inputCard, !!error && styles.errorBorder]}>
+            <TextInput
+              placeholder="https://example.com"
+              placeholderTextColor={colors.textSecondary}
+              value={url}
+              onChangeText={setUrl}
+              keyboardType="url"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.input}
+            />
           </View>
-        ) : null}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          <PrimaryButton label="수집 시작" onPress={onSubmit} disabled={!valid} loading={mutation.isPending} />
+        </View>
+      </View>
+
+      <View style={styles.listSections}>
+        <View style={styles.panelTabs}>
+          <Pressable
+            style={[styles.panelTab, selectedPanel === "active" && styles.panelTabActive]}
+            onPress={() => setSelectedPanel("active")}
+          >
+            <Text style={[styles.panelTabText, selectedPanel === "active" && styles.panelTabTextActive]}>
+              진행 중인 요청 {activeJobs.length}
+            </Text>
+            <View style={[styles.panelTabIndicator, selectedPanel === "active" && styles.panelTabIndicatorActive]} />
+          </Pressable>
+          <Pressable
+            style={[styles.panelTab, selectedPanel === "recent" && styles.panelTabActive]}
+            onPress={() => setSelectedPanel("recent")}
+          >
+            <Text style={[styles.panelTabText, selectedPanel === "recent" && styles.panelTabTextActive]}>
+              최근 요청 {recentFinishedJobs.length}
+            </Text>
+            <View style={[styles.panelTabIndicator, selectedPanel === "recent" && styles.panelTabIndicatorActive]} />
+          </Pressable>
+        </View>
+
+        <View style={styles.jobsPanel}>
+          <ScrollView
+            style={styles.sectionScroll}
+            contentContainerStyle={[
+              styles.sectionScrollContent,
+              panelItems.length === 0 && styles.sectionScrollContentEmpty,
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={panelIsRefreshing} onRefresh={refreshPanel} />}
+          >
+            {panelIsLoading ? <Text style={styles.jobsMeta}>불러오는 중...</Text> : null}
+            {panelIsError ? (
+              <Text style={styles.jobsError}>
+                {selectedPanel === "active" ? "요청 현황을 불러오지 못했습니다." : "최근 요청을 불러오지 못했습니다."}
+              </Text>
+            ) : null}
+            {!panelIsLoading && !panelIsError && panelItems.length === 0 ? (
+              <Text style={styles.jobsMeta}>{panelEmptyText}</Text>
+            ) : null}
+            {panelItems.length > 0 ? (
+              <View style={styles.activityBlock}>
+                {panelItems.map((item, index) => (
+                  <IngestJobRow key={item.id} item={item} isFirst={index === 0} />
+                ))}
+              </View>
+            ) : null}
+          </ScrollView>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -150,19 +388,24 @@ export function HomeScreen() {
 function IngestJobRow({ item, isFirst }: { item: IngestJobListItem; isFirst: boolean }) {
   return (
     <View style={[styles.jobRow, !isFirst && styles.jobRowDivider]}>
-      <View style={styles.jobHeader}>
-        <Text style={styles.jobId}>#{item.id}</Text>
-        <StatusBadge status={item.status} />
+      <View style={styles.jobRail}>
+        <View style={[styles.jobDot, JOB_DOT_STYLE[item.status]]} />
       </View>
-      <Text style={styles.jobUrl} numberOfLines={2} ellipsizeMode="tail">
-        {item.normalized_url ?? "URL 정규화 대기 중"}
-      </Text>
-      <Text style={styles.jobUpdated}>최근 갱신 {fromNow(item.updated_at)}</Text>
-      {item.status === "failed" && item.error_message ? (
-        <Text style={styles.jobError} numberOfLines={2}>
-          {item.error_message}
+      <View style={styles.jobContent}>
+        <View style={styles.jobHeader}>
+          <Text style={styles.jobId}>#{item.id}</Text>
+          <StatusBadge status={item.status} />
+        </View>
+        <Text style={styles.jobUrl} numberOfLines={2} ellipsizeMode="tail">
+          {item.normalized_url ?? "URL 정규화 대기 중"}
         </Text>
-      ) : null}
+        <Text style={styles.jobUpdated}>최근 갱신 {fromNow(item.updated_at)}</Text>
+        {item.status === "failed" && item.error_message ? (
+          <Text style={styles.jobError} numberOfLines={2}>
+            {item.error_message}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -212,13 +455,84 @@ const STATUS_TEXT_STYLE: Record<IngestJobStatus, object> = {
   },
 };
 
+const JOB_DOT_STYLE: Record<IngestJobStatus, object> = {
+  queued: {
+    backgroundColor: "#B6BBC8",
+  },
+  running: {
+    backgroundColor: colors.primary,
+  },
+  failed: {
+    backgroundColor: "#D63A31",
+  },
+  succeeded: {
+    backgroundColor: "#249B50",
+  },
+};
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  headerContent: {
     paddingHorizontal: 24,
     paddingTop: 12,
+    paddingBottom: 12,
     gap: 24,
+  },
+  listSections: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 32,
+    gap: 14,
+  },
+  panelTabs: {
+    flexDirection: "row",
+    gap: 18,
+  },
+  panelTab: {
+    paddingTop: 4,
+    paddingBottom: 10,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 8,
+  },
+  panelTabActive: {},
+  panelTabText: {
+    fontFamily: "System",
+    fontWeight: "600",
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  panelTabTextActive: {
+    color: colors.textPrimary,
+  },
+  panelTabIndicator: {
+    height: 2,
+    width: "100%",
+    backgroundColor: "transparent",
+    borderRadius: 999,
+  },
+  panelTabIndicatorActive: {
+    backgroundColor: colors.primary,
+  },
+  jobsPanel: {
+    flex: 1,
+    minHeight: 0,
+    gap: 12,
+  },
+  sectionScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  sectionScrollContent: {
+    paddingBottom: 4,
+    gap: 4,
+  },
+  sectionScrollContentEmpty: {
+    flexGrow: 1,
   },
   hero: {
     gap: 8,
@@ -298,21 +612,31 @@ const styles = StyleSheet.create({
     color: colors.error,
   },
   activityBlock: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 24,
-    backgroundColor: colors.card,
-    overflow: "hidden",
+    gap: 0,
   },
   jobRow: {
-    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
     paddingVertical: 14,
-    gap: 8,
-    backgroundColor: colors.card,
   },
   jobRowDivider: {
     borderTopWidth: 1,
     borderTopColor: "#ECEEF3",
+  },
+  jobRail: {
+    paddingTop: 6,
+    width: 10,
+    alignItems: "center",
+  },
+  jobDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  jobContent: {
+    flex: 1,
+    gap: 8,
   },
   jobHeader: {
     flexDirection: "row",

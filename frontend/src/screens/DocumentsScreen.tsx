@@ -4,7 +4,7 @@ import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/nativ
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { deleteDocument, listCategories, listDocuments, patchDocument } from "@/api/documents";
 import { CategoryChips } from "@/components/CategoryChips";
@@ -195,15 +195,6 @@ export function DocumentsScreen() {
           <View style={styles.titleBlock}>
             <Text style={styles.title}>내 문서</Text>
           </View>
-          <Pressable
-            style={styles.refreshButton}
-            onPress={() => {
-              queryClient.invalidateQueries({ queryKey: ["documents"] });
-              queryClient.invalidateQueries({ queryKey: ["categories"] });
-            }}
-          >
-            <Text style={styles.refreshText}>↻</Text>
-          </Pressable>
         </View>
       </View>
 
@@ -277,23 +268,6 @@ const styles = StyleSheet.create({
     ...typography.screenTitle,
     color: colors.textPrimary,
     letterSpacing: -0.6,
-  },
-  refreshButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  refreshText: {
-    fontFamily: "System",
-    fontWeight: "600",
-    fontSize: 18,
-    color: colors.textPrimary,
-    lineHeight: 20,
   },
   categorySection: {
     gap: 10,

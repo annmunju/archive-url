@@ -1,62 +1,91 @@
 #import "AppDelegate.h"
 
+#import <EXDevLauncher/EXDevLauncherController.h>
+#import <React/RCTBridge.h>
+#import <React/RCTBridge+Private.h>
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTLinkingManager.h>
+#import <React/RCTRootView.h>
+
+@interface AppDelegate () <EXDevLauncherControllerDelegate>
+@end
 
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-  self.moduleName = @"main";
+  self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
 
-  // You can add your custom initial props in the dictionary below.
-  // They will be passed down to the ViewController used by React Native.
-  self.initialProps = @{};
+  EXDevLauncherController *controller = [EXDevLauncherController sharedInstance];
+  [controller startWithWindow:self.window delegate:self launchOptions:launchOptions];
 
-  return [super application:application didFinishLaunchingWithOptions:launchOptions];
+  return YES;
+}
+
+- (RCTBridge *)initializeReactNativeApp
+{
+  NSDictionary *launchOptions = [EXDevLauncherController.sharedInstance getLaunchOptions];
+  self.bridge = [[RCTBridge alloc] initWithDelegate:self launchOptions:launchOptions];
+  RCTRootView *rootView = [[RCTRootView alloc] initWithBridge:self.bridge moduleName:@"main" initialProperties:@{}];
+  rootView.backgroundColor = [UIColor systemBackgroundColor];
+
+  UIViewController *rootViewController = [UIViewController new];
+  rootViewController.view = rootView;
+  self.window.rootViewController = rootViewController;
+  [self.window makeKeyAndVisible];
+
+  return self.bridge;
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
 {
-  return [self bundleURL];
-}
-
-- (NSURL *)bundleURL
-{
 #if DEBUG
+  NSURL *sourceURL = [[EXDevLauncherController sharedInstance] sourceUrl];
+  if (sourceURL != nil) {
+    return sourceURL;
+  }
   return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@".expo/.virtual-metro-entry"];
 #else
   return [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
 #endif
 }
 
-// Linking API
-- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options {
-  return [super application:application openURL:url options:options] || [RCTLinkingManager application:application openURL:url options:options];
-}
-
-// Universal Links
-- (BOOL)application:(UIApplication *)application continueUserActivity:(nonnull NSUserActivity *)userActivity restorationHandler:(nonnull void (^)(NSArray<id<UIUserActivityRestoring>> * _Nullable))restorationHandler {
-  BOOL result = [RCTLinkingManager application:application continueUserActivity:userActivity restorationHandler:restorationHandler];
-  return [super application:application continueUserActivity:userActivity restorationHandler:restorationHandler] || result;
-}
-
-// Explicitly define remote notification delegates to ensure compatibility with some third-party libraries
-- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken
+- (BOOL)application:(UIApplication *)application
+            openURL:(NSURL *)url
+            options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options
 {
-  return [super application:application didRegisterForRemoteNotificationsWithDeviceToken:deviceToken];
+  if ([EXDevLauncherController.sharedInstance onDeepLink:url options:options]) {
+    return YES;
+  }
+
+  return [RCTLinkingManager application:application openURL:url options:options];
 }
 
-// Explicitly define remote notification delegates to ensure compatibility with some third-party libraries
-- (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error
+- (BOOL)application:(UIApplication *)application
+continueUserActivity:(NSUserActivity *)userActivity
+ restorationHandler:(void (^)(NSArray<id<UIUserActivityRestoring>> *_Nullable))restorationHandler
 {
-  return [super application:application didFailToRegisterForRemoteNotificationsWithError:error];
+  return [RCTLinkingManager application:application
+                   continueUserActivity:userActivity
+                     restorationHandler:restorationHandler];
 }
 
-// Explicitly define remote notification delegates to ensure compatibility with some third-party libraries
-- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler
+- (void)devLauncherController:(EXDevLauncherController *)developmentClientController
+          didStartWithSuccess:(BOOL)success
 {
-  return [super application:application didReceiveRemoteNotification:userInfo fetchCompletionHandler:completionHandler];
+  [self initializeReactNativeApp];
+  developmentClientController.appBridge = self.bridge.batchedBridge;
+}
+
+- (BOOL)isReactInstanceValid
+{
+  return self.bridge != nil && self.bridge.valid;
+}
+
+- (void)destroyReactInstance
+{
+  [self.bridge invalidate];
+  self.bridge = nil;
 }
 
 @end

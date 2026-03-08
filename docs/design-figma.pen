@@ -87,7 +87,7 @@
                   "id": "AgYpc",
                   "name": "appTitle",
                   "fill": "$text-primary",
-                  "content": "Snap URL",
+                  "content": "ARCHIVE-URL",
                   "fontFamily": "Inter",
                   "fontSize": 40,
                   "fontWeight": "800"
