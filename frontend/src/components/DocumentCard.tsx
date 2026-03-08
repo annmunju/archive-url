@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pin } from "lucide-react-native";
 import type { DocumentListItem } from "@/api/types";
 import { colors } from "@/theme/tokens";
 import { fromNow } from "@/utils/time";
@@ -18,11 +19,15 @@ export function DocumentCard({ item, onPress }: Props) {
       onPress={onPress}
       style={({ pressed }) => [styles.card, item.is_pinned && styles.pinnedCard, pressed && styles.pressed]}
     >
+      {item.is_pinned ? (
+        <View style={styles.pinBadgeFloat}>
+          <Pin size={16} color="#0553B1" strokeWidth={2.2} />
+        </View>
+      ) : null}
       <View style={styles.titleRow}>
         <Text style={styles.title} numberOfLines={2}>
           {title}
         </Text>
-        {item.is_pinned ? <Text style={styles.pinBadge}>고정</Text> : null}
       </View>
       <Text style={styles.description} numberOfLines={3}>
         {description}
@@ -46,6 +51,7 @@ function safeDomain(url: string) {
 
 const styles = StyleSheet.create({
   card: {
+    position: "relative",
     backgroundColor: colors.card,
     borderRadius: 24,
     paddingHorizontal: 18,
@@ -63,9 +69,18 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+    alignItems: "center",
     gap: 8,
+  },
+  pinBadgeFloat: {
+    position: "absolute",
+    left: -6,
+    top: -6,
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
   },
   title: {
     fontFamily: "System",
@@ -74,17 +89,6 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     color: colors.textPrimary,
     flex: 1,
-  },
-  pinBadge: {
-    fontFamily: "System",
-    fontWeight: "600",
-    fontSize: 12,
-    lineHeight: 15,
-    color: "#0553B1",
-    backgroundColor: "#DDEEFF",
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
   },
   description: {
     fontFamily: "System",

@@ -1,12 +1,13 @@
-import { useRef } from "react";
-import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { RectButton, Swipeable } from "react-native-gesture-handler";
 import type { DocumentListItem } from "@/api/types";
 import { colors } from "@/theme/tokens";
 import { DocumentCard } from "./DocumentCard";
 
-const LEFT_ACTION_WIDTH = 92;
-const RIGHT_ACTION_WIDTH = 92;
-const OPEN_THRESHOLD_RATIO = 0.5;
+const ACTION_WIDTH = 92;
+const OPEN_THRESHOLD = 36;
+const DRAG_OFFSET = 10;
 
 type Props = {
   item: DocumentListItem;
@@ -25,130 +26,83 @@ export function SwipeableDocumentCard({
   onSwipeableOpen,
   disabled = false,
 }: Props) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isOpen = useRef(false);
+  const swipeableRef = useRef<Swipeable | null>(null);
+  const isOpenRef = useRef(false);
 
   const close = () => {
-    Animated.spring(translateX, {
-      toValue: 0,
-      useNativeDriver: true,
-      bounciness: 0,
-    }).start(() => {
-      isOpen.current = false;
-    });
+    swipeableRef.current?.close();
   };
 
-  const openDelete = () => {
-    Animated.spring(translateX, {
-      toValue: LEFT_ACTION_WIDTH,
-      useNativeDriver: true,
-      bounciness: 0,
-    }).start(() => {
-      isOpen.current = true;
-      onSwipeableOpen(close);
-    });
-  };
-
-  const openPin = () => {
-    Animated.spring(translateX, {
-      toValue: -RIGHT_ACTION_WIDTH,
-      useNativeDriver: true,
-      bounciness: 0,
-    }).start(() => {
-      isOpen.current = true;
-      onSwipeableOpen(close);
-    });
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) =>
-        !disabled &&
-        Math.abs(gestureState.dx) > 8 &&
-        Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
-      onPanResponderMove: (_, gestureState) => {
-        const next = Math.max(-RIGHT_ACTION_WIDTH, Math.min(LEFT_ACTION_WIDTH, gestureState.dx));
-        translateX.setValue(next);
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx > LEFT_ACTION_WIDTH * OPEN_THRESHOLD_RATIO) {
-          openDelete();
-          return;
-        }
-        if (gestureState.dx < -RIGHT_ACTION_WIDTH * OPEN_THRESHOLD_RATIO) {
-          openPin();
-          return;
-        }
-        close();
-      },
-      onPanResponderTerminate: close,
-    }),
-  ).current;
+  useEffect(() => () => swipeableRef.current?.close(), []);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.leftActionContainer}>
-        <Pressable
-          style={[styles.deleteButton, disabled && styles.deleteButtonDisabled]}
-          onPress={() => {
-            close();
-            onDelete();
-          }}
-          disabled={disabled}
-          accessibilityRole="button"
-          accessibilityLabel="문서 삭제"
-        >
-          <Text style={styles.deleteText}>삭제</Text>
-        </Pressable>
-      </View>
-      <View style={styles.rightActionContainer}>
-        <Pressable
-          style={[styles.pinButton, disabled && styles.pinButtonDisabled]}
-          onPress={() => {
-            close();
-            onTogglePin();
-          }}
-          disabled={disabled}
-          accessibilityRole="button"
-          accessibilityLabel={item.is_pinned ? "고정 해제" : "문서 고정"}
-        >
-          <Text style={styles.pinText}>{item.is_pinned ? "해제" : "고정"}</Text>
-        </Pressable>
-      </View>
-      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
-        <DocumentCard
-          item={item}
-          onPress={() => {
-            if (isOpen.current) {
+    <Swipeable
+      ref={swipeableRef}
+      enabled={!disabled}
+      friction={1.25}
+      overshootLeft={false}
+      overshootRight={false}
+      leftThreshold={OPEN_THRESHOLD}
+      rightThreshold={OPEN_THRESHOLD}
+      dragOffsetFromLeftEdge={DRAG_OFFSET}
+      dragOffsetFromRightEdge={DRAG_OFFSET}
+      renderLeftActions={() => (
+        <View style={styles.leftActionContainer}>
+          <RectButton
+            style={[styles.deleteButton, disabled && styles.actionDisabled]}
+            onPress={() => {
               close();
-              return;
-            }
-            onPress();
-          }}
-        />
-      </Animated.View>
-    </View>
+              onDelete();
+            }}
+            enabled={!disabled}
+          >
+            <Text style={styles.deleteText}>삭제</Text>
+          </RectButton>
+        </View>
+      )}
+      renderRightActions={() => (
+        <View style={styles.rightActionContainer}>
+          <RectButton
+            style={[styles.pinButton, disabled && styles.actionDisabled]}
+            onPress={() => {
+              close();
+              onTogglePin();
+            }}
+            enabled={!disabled}
+          >
+            <Text style={styles.pinText}>{item.is_pinned ? "해제" : "고정"}</Text>
+          </RectButton>
+        </View>
+      )}
+      onSwipeableWillOpen={() => {
+        isOpenRef.current = true;
+        onSwipeableOpen(close);
+      }}
+      onSwipeableWillClose={() => {
+        isOpenRef.current = false;
+      }}
+    >
+      <DocumentCard
+        item={item}
+        onPress={() => {
+          if (isOpenRef.current) {
+            close();
+            return;
+          }
+          onPress();
+        }}
+      />
+    </Swipeable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    position: "relative",
-  },
   leftActionContainer: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: LEFT_ACTION_WIDTH,
+    width: ACTION_WIDTH,
     justifyContent: "center",
   },
   rightActionContainer: {
-    position: "absolute",
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: RIGHT_ACTION_WIDTH,
+    width: ACTION_WIDTH,
     justifyContent: "center",
   },
   deleteButton: {
@@ -160,15 +114,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  deleteButtonDisabled: {
-    opacity: 0.5,
-  },
-  deleteText: {
-    fontFamily: "System",
-    fontWeight: "700",
-    fontSize: 15,
-    color: colors.error,
-  },
   pinButton: {
     flex: 1,
     borderRadius: 24,
@@ -178,8 +123,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pinButtonDisabled: {
+  actionDisabled: {
     opacity: 0.5,
+  },
+  deleteText: {
+    fontFamily: "System",
+    fontWeight: "700",
+    fontSize: 15,
+    color: colors.error,
   },
   pinText: {
     fontFamily: "System",
