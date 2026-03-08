@@ -5,6 +5,7 @@ import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, Text
 import { SafeAreaView } from "react-native-safe-area-context";
 import { createIngestJob, listIngestJobs } from "@/api/ingest";
 import type { IngestJob, IngestJobListItem, IngestJobStatus } from "@/api/types";
+import { useAuth } from "@/auth/context";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { consumePendingSharedUrl } from "@/native/sharedIngest";
 import { colors, radius, spacing, typography } from "@/theme/tokens";
@@ -54,6 +55,7 @@ function isValidUrl(value: string) {
 }
 
 export function HomeScreen() {
+  const { state, signOut } = useAuth();
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -314,8 +316,14 @@ export function HomeScreen() {
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <View style={styles.headerContent}>
         <View style={styles.hero}>
-          <Text style={styles.eyebrow}>Capture once, review later</Text>
+          <View style={styles.heroTopRow}>
+            <Text style={styles.eyebrow}>Capture once, review later</Text>
+            <Pressable style={styles.signOutButton} onPress={() => void signOut()}>
+              <Text style={styles.signOutButtonText}>로그아웃</Text>
+            </Pressable>
+          </View>
           <Text style={styles.title}>ARCHIVE-URL</Text>
+          {state.status === "signedIn" ? <Text style={styles.accountMeta}>{state.user.email}</Text> : null}
         </View>
 
         <View style={styles.composeSection}>
@@ -559,6 +567,12 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 8,
   },
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   eyebrow: {
     fontFamily: "System",
     fontWeight: "600",
@@ -571,6 +585,25 @@ const styles = StyleSheet.create({
     ...typography.appTitle,
     color: colors.textPrimary,
     letterSpacing: -0.8,
+  },
+  accountMeta: {
+    fontFamily: "System",
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  signOutButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  signOutButtonText: {
+    fontFamily: "System",
+    fontWeight: "600",
+    fontSize: 12,
+    color: colors.textPrimary,
   },
   composeSection: {
     gap: 12,

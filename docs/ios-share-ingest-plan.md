@@ -32,7 +32,7 @@ MVP에서 제외:
 
 이미 준비된 것:
 
-- URL scheme 존재: `snapurl`
+- URL scheme 존재: `archiveurl`
 - iOS Linking bridge 연결됨
 - 앱 홈 화면에 URL 입력 + ingest 생성 흐름 존재
 
@@ -56,7 +56,7 @@ MVP 권장 흐름:
 
 1. iOS Share Extension이 공유된 URL을 받음
 2. extension이 URL을 App Group 저장소에 기록
-3. extension이 `snapurl://ingest-from-share` 딥링크로 본 앱 실행 시도
+3. extension이 `archiveurl://ingest-from-share` 딥링크로 본 앱 실행 시도
 4. 본 앱이 시작되면 App Group 저장소에서 공유 payload를 읽음
 5. `HomeScreen` 입력창에 URL을 prefill
 6. 사용자가 `수집 시작`
@@ -92,7 +92,7 @@ MVP 권장 흐름:
 작업:
 
 - 메인 앱과 Share Extension에 동일한 App Group entitlement 추가
-- 예: `group.com.snapurl.app`
+- 예: `group.com.archiveurl.app`
 - 공유 payload를 App Group `UserDefaults` 또는 공유 파일에 기록
 
 권장:
@@ -136,7 +136,7 @@ type SharedIngestPayload = {
 작업:
 
 - `NavigationContainer` linking 설정 또는 앱 루트에서 `Linking.getInitialURL`, URL 이벤트 처리
-- `snapurl://ingest-from-share` 수신 시 공유 payload 읽기
+- `archiveurl://ingest-from-share` 수신 시 공유 payload 읽기
 - 앱 cold start / background / foreground 모두 대응
 
 관련 위치:

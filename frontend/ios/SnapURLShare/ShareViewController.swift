@@ -1,7 +1,7 @@
 import Social
 import UniformTypeIdentifiers
 
-private let sharedAppGroup = "group.com.snapurl.app"
+private let sharedAppGroup = "group.com.archiveurl.app"
 private let sharedPayloadKey = "pendingSharedIngestPayload"
 
 final class ShareViewController: SLComposeServiceViewController {
@@ -14,7 +14,7 @@ final class ShareViewController: SLComposeServiceViewController {
       guard let self else { return }
 
       guard let sharedURL else {
-        let error = NSError(domain: "SnapURLShare", code: 0, userInfo: [
+        let error = NSError(domain: "ArchiveURLShare", code: 0, userInfo: [
           NSLocalizedDescriptionKey: "URL을 찾을 수 없습니다.",
         ])
         self.extensionContext?.cancelRequest(withError: error)
@@ -102,7 +102,7 @@ final class ShareViewController: SLComposeServiceViewController {
   }
 
   private func openHostApp() {
-    guard let url = URL(string: "snapurl://ingest-from-share") else {
+    guard let url = URL(string: "archiveurl://ingest-from-share") else {
       return
     }
     extensionContext?.open(url, completionHandler: nil)

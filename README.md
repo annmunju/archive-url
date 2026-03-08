@@ -1,4 +1,4 @@
-# snap-url Quick Start
+# archive-url Quick Start
 
 모노레포 구성:
 - `backend/`: FastAPI + SQLite

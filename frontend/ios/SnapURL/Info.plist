@@ -27,8 +27,8 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>snapurl</string>
-				<string>com.snapurl.app</string>
+				<string>archiveurl</string>
+				<string>com.archiveurl.app</string>
 			</array>
 		</dict>
 	</array>

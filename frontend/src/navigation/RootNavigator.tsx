@@ -1,19 +1,21 @@
 import { NavigationContainer, DefaultTheme, type LinkingOptions } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { View, Text, StyleSheet } from "react-native";
+import { ActivityIndicator, View, Text, StyleSheet } from "react-native";
+import { useAuth } from "@/auth/context";
 import type { RootStackParamList, TabParamList } from "@/types/navigation";
 import { colors, radius } from "@/theme/tokens";
 import { HomeScreen } from "@/screens/HomeScreen";
 import { DocumentsScreen } from "@/screens/DocumentsScreen";
 import { DocumentDetailScreen } from "@/screens/DocumentDetailScreen";
 import { EditDocumentScreen } from "@/screens/EditDocumentScreen";
+import { SignInScreen } from "@/screens/SignInScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
 const linking: LinkingOptions<RootStackParamList> = {
-  prefixes: ["snapurl://", "com.snapurl.app://"],
+  prefixes: ["archiveurl://", "com.archiveurl.app://"],
   config: {
     screens: {
       Tabs: {
@@ -56,6 +58,8 @@ function Tabs() {
 }
 
 export function RootNavigator() {
+  const { state } = useAuth();
+
   return (
     <NavigationContainer
       linking={linking}
@@ -68,11 +72,31 @@ export function RootNavigator() {
       }}
     >
       <Stack.Navigator>
-        <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
-        <Stack.Screen name="DocumentDetail" component={DocumentDetailScreen} options={{ title: "" }} />
-        <Stack.Screen name="EditDocument" component={EditDocumentScreen} options={{ title: "" }} />
+        {state.status === "booting" ? (
+          <Stack.Screen
+            name="SignIn"
+            component={BootScreen}
+            options={{ headerShown: false }}
+          />
+        ) : state.status === "signedOut" ? (
+          <Stack.Screen name="SignIn" component={SignInScreen} options={{ headerShown: false }} />
+        ) : (
+          <>
+            <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
+            <Stack.Screen name="DocumentDetail" component={DocumentDetailScreen} options={{ title: "" }} />
+            <Stack.Screen name="EditDocument" component={EditDocumentScreen} options={{ title: "" }} />
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+function BootScreen() {
+  return (
+    <View style={styles.bootScreen}>
+      <ActivityIndicator size="large" color={colors.primary} />
+    </View>
   );
 }
 
@@ -118,6 +142,12 @@ const styles = StyleSheet.create({
   },
   tabPillInactive: {
     backgroundColor: "transparent",
+  },
+  bootScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.background,
   },
   tabIcon: {
     fontFamily: "System",

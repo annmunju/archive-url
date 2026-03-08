@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthProvider } from "@/auth/AuthProvider";
 import { RootNavigator } from "@/navigation/RootNavigator";
 import { colors } from "@/theme/tokens";
 
@@ -29,8 +30,10 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <StatusBar style="dark" />
-          <RootNavigator />
+          <AuthProvider>
+            <StatusBar style="dark" />
+            <RootNavigator />
+          </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

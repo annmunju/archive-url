@@ -1,6 +1,7 @@
 import type { NavigatorScreenParams } from "@react-navigation/native";
 
 export type RootStackParamList = {
+  SignIn: undefined;
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
   DocumentDetail: {
     documentId: number;

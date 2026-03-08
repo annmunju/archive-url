@@ -1,6 +1,6 @@
 #import "SharedIngestModule.h"
 
-static NSString *const kSharedIngestAppGroup = @"group.com.snapurl.app";
+static NSString *const kSharedIngestAppGroup = @"group.com.archiveurl.app";
 static NSString *const kSharedIngestPayloadKey = @"pendingSharedIngestPayload";
 
 @implementation SharedIngestModule

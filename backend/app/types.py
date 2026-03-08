@@ -35,6 +35,17 @@ class DocumentsListQuery(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
+class PatchMeRequest(BaseModel):
+    display_name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def at_least_one_field(self):
+        if self.display_name is None:
+            raise ValueError("At least one field is required")
+        self.display_name = self.display_name.strip()
+        return self
+
+
 class PatchDocumentRequest(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=300)
     description: Optional[str] = Field(default=None, max_length=1000)

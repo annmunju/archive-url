@@ -1,5 +1,6 @@
 import re
 import json
+from uuid import UUID
 from typing import Any, Dict, Optional, TypedDict
 from urllib.parse import urlparse
 
@@ -14,10 +15,13 @@ from .categories import (
     normalize_category_key,
 )
 from .db import db
+from .postgres.session import session_scope
+from .repositories import DocumentsRepository
 from .settings import settings
 
 
 class PipelineState(TypedDict, total=False):
+    user_id: str
     raw_url: str
     manual_description: str
     url: str
@@ -151,7 +155,7 @@ async def normalize_node(state: PipelineState) -> dict[str, Any]:
 async def fetch_jina_node(state: PipelineState) -> dict[str, Any]:
     timeout_seconds = settings.jina_fetch_timeout_ms / 1000
     async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
-        response = await client.get(state["jina_url"], headers={"User-Agent": "snap-url-bot/0.1"})
+        response = await client.get(state["jina_url"], headers={"User-Agent": "archive-url-bot/0.1"})
 
     if response.status_code < 200 or response.status_code >= 300:
         raise RuntimeError(f"Jina fetch failed: {response.status_code} {response.reason_phrase}")
@@ -276,17 +280,21 @@ async def classify_category_node(state: PipelineState) -> dict[str, Any]:
 async def persist_node(state: PipelineState) -> dict[str, Any]:
     extracted = state["extracted"]
     manual_description = (state.get("manual_description") or "").strip()
-    row = db.upsert_document(
-        {
-            "url": state["url"],
-            "title": extracted["title"],
-            "description": manual_description or extracted["description"],
-            "content": extracted["content"],
-            "summary": state["summary"],
-            "category_key": state["category_key"],
-            "links": extracted["links"],
-        }
-    )
+    payload = {
+        "url": state["url"],
+        "title": extracted["title"],
+        "description": manual_description or extracted["description"],
+        "content": extracted["content"],
+        "summary": state["summary"],
+        "category_key": state["category_key"],
+        "links": extracted["links"],
+    }
+
+    if settings.has_postgres_config and state.get("user_id"):
+        with session_scope() as session:
+            row = DocumentsRepository(session).upsert_document(UUID(state["user_id"]), payload)
+    else:
+        row = db.upsert_document(payload)
     return {"stored_id": int(row["id"])}
 
 
@@ -307,9 +315,10 @@ _graph_builder.add_edge("persist", END)
 _graph = _graph_builder.compile()
 
 
-async def ingest_url(raw_url: str, manual_description: Optional[str] = None) -> dict[str, Any]:
+async def ingest_url(raw_url: str, manual_description: Optional[str] = None, user_id: Optional[str] = None) -> dict[str, Any]:
     output: PipelineState = await _graph.ainvoke(
         {
+            "user_id": user_id or "",
             "raw_url": raw_url,
             "manual_description": manual_description or "",
             "url": raw_url,

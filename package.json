@@ -1,5 +1,5 @@
 {
-  "name": "snap-url-monorepo",
+  "name": "archive-url-monorepo",
   "private": true,
   "scripts": {
     "build": "echo 'No build step for Python backend'",

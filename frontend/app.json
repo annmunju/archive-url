@@ -1,23 +1,26 @@
 {
   "expo": {
     "name": "ARCHIVE-URL",
-    "slug": "snap-url",
+    "slug": "archive-url",
     "icon": "./assets/icon.png",
     "newArchEnabled": true,
-    "scheme": "snapurl",
+    "scheme": "archiveurl",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/icon.png",
       "supportsTablet": false,
-      "bundleIdentifier": "com.snapurl.app"
+      "bundleIdentifier": "com.archiveurl.app"
     },
     "android": {
-      "package": "com.snapurl.app"
+      "package": "com.archiveurl.app"
     },
     "extra": {
       "apiBaseUrl": "http://localhost:3000"
-    }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }

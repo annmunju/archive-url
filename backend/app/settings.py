@@ -33,11 +33,56 @@ def resolve_db_path() -> str:
 
 class Settings:
     port: int = int(os.getenv("PORT", "3000"))
+    environment: str = os.getenv("ENVIRONMENT", "development")
     db_path: str = resolve_db_path()
+    database_url: Optional[str] = os.getenv("DATABASE_URL")
+    supabase_url: Optional[str] = os.getenv("SUPABASE_URL")
+    supabase_jwt_audience: str = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
+    supabase_jwt_issuer: Optional[str] = os.getenv("SUPABASE_JWT_ISSUER")
+    dev_auth_token: Optional[str] = os.getenv("DEV_AUTH_TOKEN")
+    dev_auth_email: str = os.getenv("DEV_AUTH_EMAIL", "dev@archiveurl.local")
     jina_fetch_timeout_ms: int = int(os.getenv("JINA_FETCH_TIMEOUT_MS", "20000"))
     ingest_concurrency: int = max(1, int(os.getenv("INGEST_CONCURRENCY", "1")))
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    @property
+    def has_postgres_config(self) -> bool:
+        return bool(self.database_url and self.database_url.strip())
+
+    @property
+    def normalized_database_url(self) -> Optional[str]:
+        raw = (self.database_url or "").strip()
+        if not raw:
+            return None
+        if raw.startswith("postgres://"):
+            return raw.replace("postgres://", "postgresql+psycopg://", 1)
+        if raw.startswith("postgresql://") and "+psycopg" not in raw and "+psycopg2" not in raw:
+            return raw.replace("postgresql://", "postgresql+psycopg://", 1)
+        return raw
+
+    @property
+    def resolved_supabase_issuer(self) -> Optional[str]:
+        if self.supabase_jwt_issuer and self.supabase_jwt_issuer.strip():
+            return self.supabase_jwt_issuer.strip()
+        if self.supabase_url and self.supabase_url.strip():
+            return f"{self.supabase_url.rstrip('/')}/auth/v1"
+        return None
+
+    @property
+    def resolved_supabase_jwks_url(self) -> Optional[str]:
+        issuer = self.resolved_supabase_issuer
+        if not issuer:
+            return None
+        return f"{issuer.rstrip('/')}/.well-known/jwks.json"
+
+    @property
+    def has_auth_config(self) -> bool:
+        return bool(self.supabase_url and self.supabase_url.strip() and self.resolved_supabase_issuer)
+
+    @property
+    def has_dev_auth(self) -> bool:
+        return bool(self.dev_auth_token and self.dev_auth_token.strip())
 
 
 settings = Settings()

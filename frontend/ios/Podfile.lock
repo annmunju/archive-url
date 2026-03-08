@@ -281,6 +281,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
+  - ExpoSecureStore (15.0.8):
+    - ExpoModulesCore
   - EXUpdatesInterface (2.0.0):
     - ExpoModulesCore
   - fast_float (8.0.0)
@@ -2602,20 +2604,21 @@ PODS:
 DEPENDENCIES:
   - boost (from `../node_modules/react-native/third-party-podspecs/boost.podspec`)
   - DoubleConversion (from `../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec`)
-  - "EXConstants (from `../../../../개발/snap-url/frontend/node_modules/expo-constants/ios`)"
-  - "EXJSONUtils (from `../../../../개발/snap-url/frontend/node_modules/expo-json-utils/ios`)"
-  - "EXManifests (from `../../../../개발/snap-url/frontend/node_modules/expo-manifests/ios`)"
-  - "Expo (from `../../../../개발/snap-url/frontend/node_modules/expo`)"
-  - "expo-dev-client (from `../../../../개발/snap-url/frontend/node_modules/expo-dev-client/ios`)"
-  - "expo-dev-launcher (from `../../../../개발/snap-url/frontend/node_modules/expo-dev-launcher`)"
-  - "expo-dev-menu (from `../../../../개발/snap-url/frontend/node_modules/expo-dev-menu`)"
-  - "expo-dev-menu-interface (from `../../../../개발/snap-url/frontend/node_modules/expo-dev-menu-interface/ios`)"
-  - "ExpoAsset (from `../../../../개발/snap-url/frontend/node_modules/expo-asset/ios`)"
-  - "ExpoFileSystem (from `../../../../개발/snap-url/frontend/node_modules/expo-file-system/ios`)"
-  - "ExpoFont (from `../../../../개발/snap-url/frontend/node_modules/expo-font/ios`)"
-  - "ExpoKeepAwake (from `../../../../개발/snap-url/frontend/node_modules/expo-keep-awake/ios`)"
-  - "ExpoModulesCore (from `../../../../개발/snap-url/frontend/node_modules/expo-modules-core`)"
-  - "EXUpdatesInterface (from `../../../../개발/snap-url/frontend/node_modules/expo-updates-interface/ios`)"
+  - "EXConstants (from `../../../../개발/archive-url/frontend/node_modules/expo-constants/ios`)"
+  - "EXJSONUtils (from `../../../../개발/archive-url/frontend/node_modules/expo-json-utils/ios`)"
+  - "EXManifests (from `../../../../개발/archive-url/frontend/node_modules/expo-manifests/ios`)"
+  - "Expo (from `../../../../개발/archive-url/frontend/node_modules/expo`)"
+  - "expo-dev-client (from `../../../../개발/archive-url/frontend/node_modules/expo-dev-client/ios`)"
+  - "expo-dev-launcher (from `../../../../개발/archive-url/frontend/node_modules/expo-dev-launcher`)"
+  - "expo-dev-menu (from `../../../../개발/archive-url/frontend/node_modules/expo-dev-menu`)"
+  - "expo-dev-menu-interface (from `../../../../개발/archive-url/frontend/node_modules/expo-dev-menu-interface/ios`)"
+  - "ExpoAsset (from `../../../../개발/archive-url/frontend/node_modules/expo-asset/ios`)"
+  - "ExpoFileSystem (from `../../../../개발/archive-url/frontend/node_modules/expo-file-system/ios`)"
+  - "ExpoFont (from `../../../../개발/archive-url/frontend/node_modules/expo-font/ios`)"
+  - "ExpoKeepAwake (from `../../../../개발/archive-url/frontend/node_modules/expo-keep-awake/ios`)"
+  - "ExpoModulesCore (from `../../../../개발/archive-url/frontend/node_modules/expo-modules-core`)"
+  - "ExpoSecureStore (from `../../../../개발/archive-url/frontend/node_modules/expo-secure-store/ios`)"
+  - "EXUpdatesInterface (from `../../../../개발/archive-url/frontend/node_modules/expo-updates-interface/ios`)"
   - fast_float (from `../node_modules/react-native/third-party-podspecs/fast_float.podspec`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
@@ -2702,33 +2705,35 @@ EXTERNAL SOURCES:
   DoubleConversion:
     :podspec: "../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec"
   EXConstants:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-constants/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-constants/ios"
   EXJSONUtils:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-json-utils/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-json-utils/ios"
   EXManifests:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-manifests/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-manifests/ios"
   Expo:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo"
   expo-dev-client:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-dev-client/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-dev-client/ios"
   expo-dev-launcher:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-dev-launcher"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-dev-launcher"
   expo-dev-menu:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-dev-menu"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-dev-menu"
   expo-dev-menu-interface:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-dev-menu-interface/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-dev-menu-interface/ios"
   ExpoAsset:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-asset/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-asset/ios"
   ExpoFileSystem:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-file-system/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-file-system/ios"
   ExpoFont:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-font/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-font/ios"
   ExpoKeepAwake:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-keep-awake/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-keep-awake/ios"
   ExpoModulesCore:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-modules-core"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-modules-core"
+  ExpoSecureStore:
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-secure-store/ios"
   EXUpdatesInterface:
-    :path: "../../../../개발/snap-url/frontend/node_modules/expo-updates-interface/ios"
+    :path: "../../../../개발/archive-url/frontend/node_modules/expo-updates-interface/ios"
   fast_float:
     :podspec: "../node_modules/react-native/third-party-podspecs/fast_float.podspec"
   FBLazyVector:
@@ -2893,6 +2898,7 @@ SPEC CHECKSUMS:
   ExpoFont: f543ce20a228dd702813668b1a07b46f51878d47
   ExpoKeepAwake: 55f75eca6499bb9e4231ebad6f3e9cb8f99c0296
   ExpoModulesCore: 39c0aca5ee449ec315f1ded494cbdcc7ebe66aae
+  ExpoSecureStore: d32f751874a2ceb5aaeebeb3578e165c1ba2b24a
   EXUpdatesInterface: 5adf50cb41e079c861da6d9b4b954c3db9a50734
   fast_float: b32c788ed9c6a8c584d114d0047beda9664e7cc6
   FBLazyVector: 5beb8028d5a2e75dd9634917f23e23d3a061d2aa
@@ -2961,7 +2967,7 @@ SPEC CHECKSUMS:
   React-timing: b1e27e61bd184fab3792947685bebdb2dc55af9a
   React-utils: ddf52534853a3b5f19d4615b1a1f172b504673f2
   ReactAppDependencyProvider: 1bcd3527ac0390a1c898c114f81ff954be35ed79
-  ReactCodegen: 8bea260bbaf9d39f3a96901fae4dd806b27acdbf
+  ReactCodegen: 002fe44645a48dbe5dca25b617e663f366542ac0
   ReactCommon: 5f0e5c09a64a2717215dd84380e1a747810406f2
   RNGestureHandler: 12a436b5074378be95468a57b62c165a1e24cfc9
   RNScreens: 35525ebfe219c8709da0d26aebbc9a5e02e1077b

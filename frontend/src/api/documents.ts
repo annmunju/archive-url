@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, authFetch } from "./client";
 import type { CategoryItem, Document, DocumentListItem, ExtractedLink } from "./types";
 
 type ListDocumentsResponse = {
@@ -22,11 +22,11 @@ type PatchDocumentPayload = {
 };
 
 export async function listDocuments(limit: number, offset: number): Promise<ListDocumentsResponse> {
-  return apiFetch<ListDocumentsResponse>(`/documents?limit=${limit}&offset=${offset}`);
+  return authFetch<ListDocumentsResponse>(`/documents?limit=${limit}&offset=${offset}`);
 }
 
 export async function getDocument(id: number): Promise<GetDocumentResponse> {
-  return apiFetch<GetDocumentResponse>(`/documents/${id}`);
+  return authFetch<GetDocumentResponse>(`/documents/${id}`);
 }
 
 export async function listCategories(): Promise<ListCategoriesResponse> {
@@ -34,14 +34,14 @@ export async function listCategories(): Promise<ListCategoriesResponse> {
 }
 
 export async function patchDocument(id: number, payload: PatchDocumentPayload): Promise<GetDocumentResponse> {
-  return apiFetch<GetDocumentResponse>(`/documents/${id}`, {
+  return authFetch<GetDocumentResponse>(`/documents/${id}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
 export async function deleteDocument(id: number): Promise<void> {
-  return apiFetch<void>(`/documents/${id}`, {
+  return authFetch<void>(`/documents/${id}`, {
     method: "DELETE",
   });
 }
