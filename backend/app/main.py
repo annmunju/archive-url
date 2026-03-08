@@ -18,14 +18,26 @@ from .auth import (
 )
 from .categories import list_categories
 from .jobs import bootstrap_ingest_worker, enqueue_ingest_job
+from .monitoring import capture_backend_exception, init_monitoring
 from .pipeline import normalize_url
-from .repositories import DocumentsRepository, IngestJobsRepository, UsersRepository
+from .rate_limit import RateLimitExceededError, RateLimitRule, get_client_ip, rate_limiter
+from .repositories import AuditLogsRepository, DocumentsRepository, IngestJobsRepository, UsersRepository
 from .serializers import map_user_response
 from .settings import settings
 from .types import DocumentsListQuery, IngestListQuery, IngestRequest, PatchDocumentRequest, PatchMeRequest
 
 app = FastAPI()
 REQUEST_ID_HEADER = "X-Request-Id"
+INGEST_RATE_LIMIT_RULE = RateLimitRule(
+    name="ingest_create",
+    limit=settings.ingest_rate_limit_count,
+    window_seconds=settings.ingest_rate_limit_window_seconds,
+)
+MUTATION_RATE_LIMIT_RULE = RateLimitRule(
+    name="mutation",
+    limit=settings.mutation_rate_limit_count,
+    window_seconds=settings.mutation_rate_limit_window_seconds,
+)
 
 
 def error_response(code: str, message: str, retryable: bool, extra: Optional[dict] = None) -> dict:
@@ -155,10 +167,31 @@ async def auth_config_exception_handler(request: Request, exc: AuthConfigError):
     return response_with_request_id(response, get_request_id(request))
 
 
+@app.exception_handler(RateLimitExceededError)
+async def rate_limit_exception_handler(request: Request, exc: RateLimitExceededError):
+    response = JSONResponse(
+        status_code=429,
+        content=error_response(
+            "RATE_LIMIT_EXCEEDED",
+            f"Too many requests for {exc.rule.name}. Please try again later.",
+            True,
+            {
+                "request_id": get_request_id(request),
+                "retry_after_seconds": exc.retry_after_seconds,
+                "limit": exc.rule.limit,
+                "window_seconds": exc.rule.window_seconds,
+            },
+        ),
+    )
+    response.headers["Retry-After"] = str(exc.retry_after_seconds)
+    return response_with_request_id(response, get_request_id(request))
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     request_id = get_request_id(request)
     log_request(f"[request_id={request_id}] unhandled exception: {type(exc).__name__}: {exc}")
+    capture_backend_exception(exc, request_id=request_id)
     response = JSONResponse(
         status_code=500,
         content=error_response(
@@ -173,6 +206,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.on_event("startup")
 async def startup_event():
+    init_monitoring()
     boot = await bootstrap_ingest_worker()
     if boot["recoveredRunning"] or boot["queued"]:
         print(
@@ -215,27 +249,47 @@ async def get_me(current_user=Depends(require_current_user), session: Session = 
 
 @app.patch("/me")
 async def patch_me(
+    request: Request,
     body: PatchMeRequest,
     current_user=Depends(require_current_user),
     session: Session = Depends(get_session),
 ):
+    rate_limiter.hit(key=f"{get_client_ip(request)}:{current_user.id}", rule=MUTATION_RATE_LIMIT_RULE)
     repo = UsersRepository(session)
     user = repo.get_by_id(current_user.id)
     if user is None:
         return JSONResponse(status_code=404, content=error_response("USER_NOT_FOUND", "User not found", False))
     repo.update_profile(user, display_name=body.display_name)
+    AuditLogsRepository(session).create_log(
+        action="user.profile_updated",
+        entity_type="user",
+        entity_id=str(user.id),
+        user_id=UUID(current_user.id),
+        payload={
+            "display_name": body.display_name,
+            "request_id": get_request_id(request),
+        },
+    )
     session.commit()
     session.refresh(user)
     return {"user": map_user_response(user)}
 
 
 @app.delete("/me")
-async def delete_me(current_user=Depends(require_current_user), session: Session = Depends(get_session)):
+async def delete_me(request: Request, current_user=Depends(require_current_user), session: Session = Depends(get_session)):
+    rate_limiter.hit(key=f"{get_client_ip(request)}:{current_user.id}", rule=MUTATION_RATE_LIMIT_RULE)
     repo = UsersRepository(session)
     user = repo.get_by_id(current_user.id)
     if user is None:
         return JSONResponse(status_code=404, content=error_response("USER_NOT_FOUND", "User not found", False))
     repo.mark_deleted(user)
+    AuditLogsRepository(session).create_log(
+        action="user.deleted",
+        entity_type="user",
+        entity_id=str(user.id),
+        user_id=UUID(current_user.id),
+        payload={"request_id": get_request_id(request)},
+    )
     session.commit()
     return {
         "result": {
@@ -246,7 +300,12 @@ async def delete_me(current_user=Depends(require_current_user), session: Session
 
 
 @app.post("/me/reactivate")
-async def reactivate_me(current_user=Depends(require_current_user_allow_deleted), session: Session = Depends(get_session)):
+async def reactivate_me(
+    request: Request,
+    current_user=Depends(require_current_user_allow_deleted),
+    session: Session = Depends(get_session),
+):
+    rate_limiter.hit(key=f"{get_client_ip(request)}:{current_user.id}", rule=MUTATION_RATE_LIMIT_RULE)
     repo = UsersRepository(session)
     user = repo.get_by_id(current_user.id)
     if user is None:
@@ -254,6 +313,13 @@ async def reactivate_me(current_user=Depends(require_current_user_allow_deleted)
     if user.status == "disabled":
         return JSONResponse(status_code=403, content=error_response("ACCOUNT_DISABLED", "Account disabled", False))
     repo.reactivate(user)
+    AuditLogsRepository(session).create_log(
+        action="user.reactivated",
+        entity_type="user",
+        entity_id=str(user.id),
+        user_id=UUID(current_user.id),
+        payload={"request_id": get_request_id(request)},
+    )
     session.commit()
     session.refresh(user)
     return {"user": map_user_response(user)}
@@ -261,11 +327,13 @@ async def reactivate_me(current_user=Depends(require_current_user_allow_deleted)
 
 @app.post("/ingest")
 async def ingest(
+    request: Request,
     body: IngestRequest,
     idempotency_key: Optional[str] = Header(default=None, alias="Idempotency-Key"),
     current_user=Depends(require_current_user),
     session: Session = Depends(get_session),
 ):
+    rate_limiter.hit(key=f"{get_client_ip(request)}:{current_user.id}", rule=INGEST_RATE_LIMIT_RULE)
     try:
         normalized_url = normalize_url(str(body.url))
         idempotency_key_trimmed = (idempotency_key or "").strip()
@@ -311,6 +379,18 @@ async def ingest(
                 "description": body.description.strip() if body.description else None,
                 "max_attempts": 2,
             }
+        )
+        AuditLogsRepository(session).create_log(
+            action="ingest.created",
+            entity_type="ingest_job",
+            entity_id=str(job["id"]),
+            user_id=user_id,
+            payload={
+                "request_id": get_request_id(request),
+                "raw_url": str(body.url),
+                "normalized_url": normalized_url,
+                "idempotency_key": idempotency_key_trimmed or None,
+            },
         )
         session.commit()
 
@@ -422,11 +502,13 @@ async def get_document(doc_id: int, current_user=Depends(require_current_user), 
 
 @app.patch("/documents/{doc_id}")
 async def patch_document(
+    request: Request,
     doc_id: int,
     body: PatchDocumentRequest,
     current_user=Depends(require_current_user),
     session: Session = Depends(get_session),
 ):
+    rate_limiter.hit(key=f"{get_client_ip(request)}:{current_user.id}", rule=MUTATION_RATE_LIMIT_RULE)
     if doc_id <= 0:
         return JSONResponse(status_code=400, content=error_response("INVALID_REQUEST_BODY", "Invalid id", False))
 
@@ -443,17 +525,50 @@ async def patch_document(
     )
     if not updated:
         return JSONResponse(status_code=404, content=error_response("DOCUMENT_NOT_FOUND", "Document not found", False))
+    AuditLogsRepository(session).create_log(
+        action="document.updated",
+        entity_type="document",
+        entity_id=str(doc_id),
+        user_id=UUID(current_user.id),
+        payload={
+            "request_id": get_request_id(request),
+            "changed_fields": [
+                key
+                for key, value in {
+                    "title": body.title,
+                    "description": body.description,
+                    "category_key": body.category_key,
+                    "links": body.links,
+                    "is_pinned": body.is_pinned,
+                }.items()
+                if value is not None
+            ],
+        },
+    )
     session.commit()
     return {"document": updated}
 
 
 @app.delete("/documents/{doc_id}")
-async def delete_document(doc_id: int, current_user=Depends(require_current_user), session: Session = Depends(get_session)):
+async def delete_document(
+    request: Request,
+    doc_id: int,
+    current_user=Depends(require_current_user),
+    session: Session = Depends(get_session),
+):
+    rate_limiter.hit(key=f"{get_client_ip(request)}:{current_user.id}", rule=MUTATION_RATE_LIMIT_RULE)
     if doc_id <= 0:
         return JSONResponse(status_code=400, content=error_response("INVALID_REQUEST_BODY", "Invalid id", False))
 
     deleted = DocumentsRepository(session).delete_document_by_id(UUID(current_user.id), doc_id)
     if not deleted:
         return JSONResponse(status_code=404, content=error_response("DOCUMENT_NOT_FOUND", "Document not found", False))
+    AuditLogsRepository(session).create_log(
+        action="document.deleted",
+        entity_type="document",
+        entity_id=str(doc_id),
+        user_id=UUID(current_user.id),
+        payload={"request_id": get_request_id(request)},
+    )
     session.commit()
     return Response(status_code=204)

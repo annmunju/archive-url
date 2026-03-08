@@ -34,6 +34,8 @@ def resolve_db_path() -> str:
 class Settings:
     port: int = int(os.getenv("PORT", "3000"))
     environment: str = os.getenv("ENVIRONMENT", "development")
+    sentry_dsn: Optional[str] = os.getenv("SENTRY_DSN")
+    sentry_traces_sample_rate: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0"))
     db_path: str = resolve_db_path()
     database_url: Optional[str] = os.getenv("DATABASE_URL")
     supabase_url: Optional[str] = os.getenv("SUPABASE_URL")
@@ -43,6 +45,10 @@ class Settings:
     dev_auth_email: str = os.getenv("DEV_AUTH_EMAIL", "annmungdo@naver.com")
     jina_fetch_timeout_ms: int = int(os.getenv("JINA_FETCH_TIMEOUT_MS", "20000"))
     ingest_concurrency: int = max(1, int(os.getenv("INGEST_CONCURRENCY", "1")))
+    ingest_rate_limit_count: int = max(1, int(os.getenv("INGEST_RATE_LIMIT_COUNT", "20")))
+    ingest_rate_limit_window_seconds: int = max(1, int(os.getenv("INGEST_RATE_LIMIT_WINDOW_SECONDS", "60")))
+    mutation_rate_limit_count: int = max(1, int(os.getenv("MUTATION_RATE_LIMIT_COUNT", "30")))
+    mutation_rate_limit_window_seconds: int = max(1, int(os.getenv("MUTATION_RATE_LIMIT_WINDOW_SECONDS", "300")))
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 

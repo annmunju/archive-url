@@ -142,6 +142,8 @@
 
 - `PORT`
 - `DATABASE_URL`
+- `SENTRY_DSN`
+- `SENTRY_TRACES_SAMPLE_RATE`
 - `SUPABASE_URL`
 - `SUPABASE_JWT_AUDIENCE`
 - `SUPABASE_JWT_ISSUER` (필요 시)
@@ -173,17 +175,35 @@
 - Supabase JWT 검증
 - 사용자별 문서/ingest 분리
 - request id 추적
+- 주요 사용자 액션 audit log 적재
+- 선택적 monitoring hook
 
 아직 필요한 것:
 
 - [ ] production/staging 환경 분리 명확화
 - [ ] HTTPS 고정 backend URL
-- [ ] 장애 로그 수집 도구 도입
+- [ ] Sentry DSN 실제 연결
 - [ ] backup 정책 문서화
 - [ ] audit log 실제 적재 확대
 - [ ] worker/queue 분리 고도화
 
-## 11. 출시 전 백엔드 체크리스트
+## 11. rate limiting
+
+현재 정책:
+
+- `POST /ingest`: 기본 `20 requests / 60 seconds`
+- 계정/문서 변경 API: 기본 `30 requests / 300 seconds`
+- 기준 키는 `IP + user_id`
+- 초과 시 `429 RATE_LIMIT_EXCEEDED`
+
+관련 env:
+
+- `INGEST_RATE_LIMIT_COUNT`
+- `INGEST_RATE_LIMIT_WINDOW_SECONDS`
+- `MUTATION_RATE_LIMIT_COUNT`
+- `MUTATION_RATE_LIMIT_WINDOW_SECONDS`
+
+## 12. 출시 전 백엔드 체크리스트
 
 - [x] `/me` 기반 인증
 - [x] 사용자별 문서 분리
@@ -192,16 +212,17 @@
 - [x] 삭제 계정 복구 API
 - [x] request id 로그
 - [x] Postgres + Alembic
+- [x] 선택적 monitoring hook
 - [ ] production deploy 고정
-- [ ] monitoring / error tracking
+- [ ] monitoring service DSN 연결
 - [ ] backup & restore runbook
 - [ ] rate limiting 보강
 - [ ] audit log 실제 활용
 
-## 12. 남은 백엔드 우선순위
+## 13. 남은 백엔드 우선순위
 
 1. production/staging 배포 구조 정리
-2. 에러 추적/모니터링 도입
+2. Sentry DSN 연결 및 alerting
 3. backup 정책 정리
 4. queue/worker 분리 고도화
 5. audit log 활용 확대

@@ -153,6 +153,7 @@ API URL 우선순위:
 - API 요청마다 `X-Request-Id` 전송
 - 에러 메시지에 `오류 ID` 포함
 - backend 로그의 request id와 바로 매칭 가능
+- 전역 JS 에러는 Error Boundary와 global handler로 수집
 
 인증 오류 UX:
 
@@ -169,6 +170,7 @@ API URL 우선순위:
 - [x] 문서 검색
 - [x] iOS 공유 시트
 - [x] 공유 시 직접 ingest fallback 구조
+- [x] 전역 에러 boundary
 - [ ] 공유 시 성공/실패 사용자 피드백 polish
 - [ ] 계정/설정 화면 분리
 - [ ] Privacy Policy / Support 링크를 앱 내부에서 노출
