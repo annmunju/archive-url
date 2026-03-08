@@ -19,6 +19,7 @@ from .settings import settings
 
 class PipelineState(TypedDict, total=False):
     raw_url: str
+    manual_description: str
     url: str
     jina_url: str
     markdown: str
@@ -274,11 +275,12 @@ async def classify_category_node(state: PipelineState) -> dict[str, Any]:
 
 async def persist_node(state: PipelineState) -> dict[str, Any]:
     extracted = state["extracted"]
+    manual_description = (state.get("manual_description") or "").strip()
     row = db.upsert_document(
         {
             "url": state["url"],
             "title": extracted["title"],
-            "description": extracted["description"],
+            "description": manual_description or extracted["description"],
             "content": extracted["content"],
             "summary": state["summary"],
             "category_key": state["category_key"],
@@ -305,10 +307,11 @@ _graph_builder.add_edge("persist", END)
 _graph = _graph_builder.compile()
 
 
-async def ingest_url(raw_url: str) -> dict[str, Any]:
+async def ingest_url(raw_url: str, manual_description: Optional[str] = None) -> dict[str, Any]:
     output: PipelineState = await _graph.ainvoke(
         {
             "raw_url": raw_url,
+            "manual_description": manual_description or "",
             "url": raw_url,
             "jina_url": "",
             "markdown": "",

@@ -17,13 +17,13 @@ RCT_REMAP_METHOD(consumePendingSharedUrl,
     return;
   }
 
-  NSString *payload = [sharedDefaults stringForKey:kSharedIngestPayloadKey];
-  if (payload == nil || payload.length == 0) {
+  NSString *payloadString = [sharedDefaults stringForKey:kSharedIngestPayloadKey];
+  if (payloadString == nil || payloadString.length == 0) {
     resolve((id)kCFNull);
     return;
   }
 
-  NSData *data = [payload dataUsingEncoding:NSUTF8StringEncoding];
+  NSData *data = [payloadString dataUsingEncoding:NSUTF8StringEncoding];
   if (data == nil) {
     [sharedDefaults removeObjectForKey:kSharedIngestPayloadKey];
     [sharedDefaults synchronize];
@@ -41,6 +41,7 @@ RCT_REMAP_METHOD(consumePendingSharedUrl,
   }
 
   NSString *url = json[@"url"];
+  NSString *note = json[@"note"];
   [sharedDefaults removeObjectForKey:kSharedIngestPayloadKey];
   [sharedDefaults synchronize];
 
@@ -49,7 +50,12 @@ RCT_REMAP_METHOD(consumePendingSharedUrl,
     return;
   }
 
-  resolve(url);
+  NSMutableDictionary *payload = [NSMutableDictionary dictionaryWithObject:url forKey:@"url"];
+  if (note != nil && [note isKindOfClass:[NSString class]] && note.length > 0) {
+    payload[@"note"] = note;
+  }
+
+  resolve(payload);
 }
 
 + (BOOL)requiresMainQueueSetup

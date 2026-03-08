@@ -55,11 +55,14 @@ function isValidUrl(value: string) {
 
 export function HomeScreen() {
   const [url, setUrl] = useState("");
+  const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [recentJobs, setRecentJobs] = useState<IngestJobListItem[]>([]);
   const [selectedPanel, setSelectedPanel] = useState<"active" | "recent">("active");
   const recentJobTimeoutsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
-  const submitUrlRef = useRef<(rawUrl: string) => void>(() => undefined);
+  const submitUrlRef = useRef<(rawUrl: string, description?: string) => void>(
+    (_rawUrl: string, _description?: string) => undefined,
+  );
   const queuedRefetchRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
   const runningRefetchRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
   const latestRefetchRef = useRef<() => Promise<unknown>>(() => Promise.resolve());
@@ -75,9 +78,11 @@ export function HomeScreen() {
   }, []);
 
   const mutation = useMutation({
-    mutationFn: (rawUrl: string) => createIngestJob(rawUrl),
+    mutationFn: ({ rawUrl, description }: { rawUrl: string; description?: string }) =>
+      createIngestJob(rawUrl, description),
     onSuccess: async (response) => {
       setUrl("");
+      setNote("");
       setError("");
       const nextItem = toIngestJobListItem(response.job);
       setRecentJobs((current) => upsertJob(current, nextItem));
@@ -120,7 +125,7 @@ export function HomeScreen() {
   });
 
   const submitUrl = useCallback(
-    (rawUrl: string) => {
+    (rawUrl: string, description?: string) => {
       if (mutation.isPending) {
         return;
       }
@@ -132,7 +137,10 @@ export function HomeScreen() {
 
       setError("");
       setUrl(rawUrl);
-      mutation.mutate(rawUrl);
+      if (description !== undefined) {
+        setNote(description);
+      }
+      mutation.mutate({ rawUrl, description });
     },
     [mutation],
   );
@@ -200,7 +208,7 @@ export function HomeScreen() {
   );
 
   const onSubmit = () => {
-    submitUrl(url);
+    submitUrl(url, note.trim() || undefined);
   };
 
   const panelCount = selectedPanel === "active" ? activeJobs.length : recentFinishedJobs.length;
@@ -250,9 +258,9 @@ export function HomeScreen() {
           latestRefetchRef.current(),
         ]);
 
-        const sharedUrl = await consumePendingSharedUrl();
-        if (sharedUrl) {
-          submitUrlRef.current(sharedUrl);
+        const sharedPayload = await consumePendingSharedUrl();
+        if (sharedPayload?.url) {
+          submitUrlRef.current(sharedPayload.url, sharedPayload.note);
         }
       } catch {
         setError("공유된 링크를 불러오지 못했습니다.");
@@ -278,9 +286,9 @@ export function HomeScreen() {
 
       const syncPendingSharedUrl = async () => {
         try {
-          const sharedUrl = await consumePendingSharedUrl();
-          if (!cancelled && sharedUrl) {
-            submitUrlRef.current(sharedUrl);
+          const sharedPayload = await consumePendingSharedUrl();
+          if (!cancelled && sharedPayload?.url) {
+            submitUrlRef.current(sharedPayload.url, sharedPayload.note);
           }
         } catch {
           if (!cancelled) {
@@ -322,6 +330,18 @@ export function HomeScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               style={styles.input}
+            />
+          </View>
+          <Text style={styles.optionalFieldLabel}>메모 (선택)</Text>
+          <View style={[styles.inputCard, styles.noteCard]}>
+            <TextInput
+              placeholder="메모를 추가하세요"
+              placeholderTextColor={colors.textSecondary}
+              value={note}
+              onChangeText={setNote}
+              multiline
+              textAlignVertical="top"
+              style={styles.noteInput}
             />
           </View>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -560,6 +580,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.textPrimary,
   },
+  optionalFieldLabel: {
+    fontFamily: "System",
+    fontWeight: "600",
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
   inputCard: {
     height: 52,
     borderRadius: 18,
@@ -569,9 +595,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     justifyContent: "center",
   },
+  noteCard: {
+    height: 96,
+    paddingTop: 14,
+    paddingBottom: 14,
+    justifyContent: "flex-start",
+  },
   input: {
     ...typography.body,
     color: colors.textPrimary,
+  },
+  noteInput: {
+    ...typography.body,
+    color: colors.textPrimary,
+    minHeight: 64,
+    lineHeight: 21,
   },
   errorBorder: {
     borderColor: colors.error,

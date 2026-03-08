@@ -41,6 +41,7 @@ class DB:
                     idempotency_key TEXT,
                     raw_url TEXT NOT NULL,
                     normalized_url TEXT,
+                    description TEXT,
                     status TEXT NOT NULL CHECK(status IN ('queued','running','succeeded','failed')),
                     attempt INTEGER NOT NULL DEFAULT 0,
                     max_attempts INTEGER NOT NULL DEFAULT 2,
@@ -63,6 +64,7 @@ class DB:
             )
             self._ensure_documents_category_column()
             self._ensure_documents_is_pinned_column()
+            self._ensure_ingest_jobs_description_column()
             self._conn.commit()
 
     def _ensure_documents_category_column(self):
@@ -83,6 +85,13 @@ class DB:
         if "is_pinned" in names:
             return
         self._conn.execute("ALTER TABLE documents ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
+
+    def _ensure_ingest_jobs_description_column(self):
+        columns = self._conn.execute("PRAGMA table_info(ingest_jobs)").fetchall()
+        names = {column["name"] for column in columns}
+        if "description" in names:
+            return
+        self._conn.execute("ALTER TABLE ingest_jobs ADD COLUMN description TEXT")
 
     @staticmethod
     def _parse_document_row(row: Optional[sqlite3.Row]) -> Optional[dict[str, Any]]:
@@ -124,6 +133,7 @@ class DB:
             "idempotency_key": row["idempotency_key"],
             "raw_url": row["raw_url"],
             "normalized_url": row["normalized_url"],
+            "description": row["description"],
             "status": row["status"],
             "attempt": row["attempt"],
             "max_attempts": row["max_attempts"],
@@ -209,6 +219,9 @@ class DB:
         if patch.get("description") is not None:
             sets.append("description = ?")
             params.append(patch["description"])
+        if patch.get("category_key") is not None:
+            sets.append("category_key = ?")
+            params.append(patch["category_key"])
         if patch.get("links") is not None:
             sets.append("links = ?")
             params.append(json.dumps(patch["links"]))
@@ -249,22 +262,23 @@ class DB:
             cursor = self._conn.execute(
                 """
                 INSERT INTO ingest_jobs (
-                  request_id, idempotency_key, raw_url, normalized_url, status, attempt, max_attempts
+                  request_id, idempotency_key, raw_url, normalized_url, description, status, attempt, max_attempts
                 )
-                VALUES (?, ?, ?, ?, 'queued', 0, ?)
+                VALUES (?, ?, ?, ?, ?, 'queued', 0, ?)
                 """,
                 (
                     input_data["request_id"],
                     input_data["idempotency_key"],
                     input_data["raw_url"],
                     input_data["normalized_url"],
+                    input_data.get("description"),
                     input_data["max_attempts"],
                 ),
             )
             row = self._conn.execute(
                 """
                 SELECT
-                  id, request_id, idempotency_key, raw_url, normalized_url, status, attempt, max_attempts,
+                  id, request_id, idempotency_key, raw_url, normalized_url, description, status, attempt, max_attempts,
                   error_code, error_message, document_id,
                   created_at, updated_at, started_at, finished_at
                 FROM ingest_jobs
@@ -282,7 +296,7 @@ class DB:
             row = self._conn.execute(
                 """
                 SELECT
-                  id, request_id, idempotency_key, raw_url, normalized_url, status, attempt, max_attempts,
+                  id, request_id, idempotency_key, raw_url, normalized_url, description, status, attempt, max_attempts,
                   error_code, error_message, document_id,
                   created_at, updated_at, started_at, finished_at
                 FROM ingest_jobs
@@ -299,7 +313,7 @@ class DB:
             row = self._conn.execute(
                 """
                 SELECT
-                  id, request_id, idempotency_key, raw_url, normalized_url, status, attempt, max_attempts,
+                  id, request_id, idempotency_key, raw_url, normalized_url, description, status, attempt, max_attempts,
                   error_code, error_message, document_id,
                   created_at, updated_at, started_at, finished_at
                 FROM ingest_jobs
@@ -316,7 +330,7 @@ class DB:
             row = self._conn.execute(
                 """
                 SELECT
-                  id, request_id, idempotency_key, raw_url, normalized_url, status, attempt, max_attempts,
+                  id, request_id, idempotency_key, raw_url, normalized_url, description, status, attempt, max_attempts,
                   error_code, error_message, document_id,
                   created_at, updated_at, started_at, finished_at
                 FROM ingest_jobs
@@ -334,7 +348,7 @@ class DB:
                 rows = self._conn.execute(
                     """
                     SELECT
-                      id, request_id, idempotency_key, raw_url, normalized_url, status, attempt, max_attempts,
+                      id, request_id, idempotency_key, raw_url, normalized_url, description, status, attempt, max_attempts,
                       error_code, error_message, document_id,
                       created_at, updated_at, started_at, finished_at
                     FROM ingest_jobs
@@ -348,7 +362,7 @@ class DB:
                 rows = self._conn.execute(
                     """
                     SELECT
-                      id, request_id, idempotency_key, raw_url, normalized_url, status, attempt, max_attempts,
+                      id, request_id, idempotency_key, raw_url, normalized_url, description, status, attempt, max_attempts,
                       error_code, error_message, document_id,
                       created_at, updated_at, started_at, finished_at
                     FROM ingest_jobs
@@ -379,7 +393,7 @@ class DB:
             row = self._conn.execute(
                 """
                 SELECT
-                  id, request_id, idempotency_key, raw_url, normalized_url, status, attempt, max_attempts,
+                  id, request_id, idempotency_key, raw_url, normalized_url, description, status, attempt, max_attempts,
                   error_code, error_message, document_id,
                   created_at, updated_at, started_at, finished_at
                 FROM ingest_jobs

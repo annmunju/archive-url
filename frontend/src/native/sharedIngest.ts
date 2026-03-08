@@ -1,7 +1,7 @@
 import { NativeModules, Platform } from "react-native";
 
 type SharedIngestModuleShape = {
-  consumePendingSharedUrl(): Promise<string | null>;
+  consumePendingSharedUrl(): Promise<{ url: string; note?: string } | null>;
 };
 
 const nativeModule = NativeModules.SharedIngestModule as SharedIngestModuleShape | undefined;
@@ -11,6 +11,6 @@ export async function consumePendingSharedUrl() {
     return null;
   }
 
-  const sharedUrl = await nativeModule.consumePendingSharedUrl();
-  return sharedUrl || null;
+  const sharedPayload = await nativeModule.consumePendingSharedUrl();
+  return sharedPayload || null;
 }

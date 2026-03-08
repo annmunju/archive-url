@@ -16,6 +16,7 @@ type ListCategoriesResponse = {
 type PatchDocumentPayload = {
   title?: string;
   description?: string;
+  category_key?: string;
   links?: ExtractedLink[];
   is_pinned?: boolean;
 };

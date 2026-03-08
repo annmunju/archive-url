@@ -21,7 +21,7 @@ final class ShareViewController: SLComposeServiceViewController {
         return
       }
 
-      self.persistSharedURL(sharedURL)
+      self.persistSharedPayload(url: sharedURL, note: self.normalizedNote())
       self.openHostApp()
       self.extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
     }
@@ -77,11 +77,19 @@ final class ShareViewController: SLComposeServiceViewController {
     return detector.firstMatch(in: text, options: [], range: range)?.url?.absoluteString
   }
 
-  private func persistSharedURL(_ url: String) {
-    let payload: [String: String] = [
+  private func normalizedNote() -> String? {
+    let trimmed = contentText.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private func persistSharedPayload(url: String, note: String?) {
+    var payload: [String: String] = [
       "url": url,
       "receivedAt": ISO8601DateFormatter().string(from: Date()),
     ]
+    if let note {
+      payload["note"] = note
+    }
 
     guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
           let json = String(data: data, encoding: .utf8) else {

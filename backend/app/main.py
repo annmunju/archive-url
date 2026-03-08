@@ -124,6 +124,7 @@ async def ingest(body: IngestRequest, idempotency_key: Optional[str] = Header(de
                 "idempotency_key": idempotency_key_trimmed or None,
                 "raw_url": str(body.url),
                 "normalized_url": normalized_url,
+                "description": body.description.strip() if body.description else None,
                 "max_attempts": 2,
             }
         )
@@ -232,6 +233,7 @@ async def patch_document(doc_id: int, body: PatchDocumentRequest):
         {
             "title": body.title,
             "description": body.description,
+            "category_key": body.category_key,
             "links": [link.model_dump(mode="json") for link in body.links] if body.links is not None else None,
             "is_pinned": body.is_pinned,
         },

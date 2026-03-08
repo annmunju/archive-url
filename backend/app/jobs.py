@@ -44,7 +44,7 @@ async def process_job(job_id: int):
         return
 
     try:
-        result = await ingest_url(running_job["raw_url"])
+        result = await ingest_url(running_job["raw_url"], running_job.get("description"))
         db.mark_ingest_job_succeeded(job_id, int(result["id"]))
     except Exception as error:  # noqa: BLE001
         job_error = to_job_error(error)

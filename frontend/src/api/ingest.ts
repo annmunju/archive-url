@@ -20,10 +20,13 @@ type ListIngestJobsResponse = {
   items: IngestJobListItem[];
 };
 
-export async function createIngestJob(url: string): Promise<CreateIngestResponse> {
+export async function createIngestJob(url: string, description?: string): Promise<CreateIngestResponse> {
   return apiFetch<CreateIngestResponse>("/ingest", {
     method: "POST",
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({
+      url,
+      ...(description ? { description } : {}),
+    }),
   });
 }
 

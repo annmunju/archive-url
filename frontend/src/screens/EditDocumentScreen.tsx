@@ -3,11 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { ApiError } from "@/api/client";
-import { getDocument, patchDocument } from "@/api/documents";
+import { getDocument, listCategories, patchDocument } from "@/api/documents";
+import { CategoryChips } from "@/components/CategoryChips";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { colors } from "@/theme/tokens";
 import type { RootStackParamList } from "@/types/navigation";
 import type { DocumentListItem, ExtractedLink } from "@/api/types";
+import { FALLBACK_CATEGORY_KEY } from "@/utils/category";
 import { cleanSummary, cleanTitle } from "@/utils/text";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EditDocument">;
@@ -15,6 +17,7 @@ type SanitizedLink = { url: string; content: string };
 type PatchPayload = {
   title?: string;
   description?: string;
+  category_key?: string;
   links?: SanitizedLink[];
 };
 
@@ -29,15 +32,22 @@ export function EditDocumentScreen({ route, navigation }: Props) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [summary, setSummary] = useState("");
+  const [categoryKey, setCategoryKey] = useState(FALLBACK_CATEGORY_KEY);
   const [links, setLinks] = useState<ExtractedLink[]>([]);
   const [newUrl, setNewUrl] = useState("");
   const [newContent, setNewContent] = useState("");
+  const categoriesQuery = useQuery({
+    queryKey: ["categories"],
+    queryFn: listCategories,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     if (!query.data) return;
     setTitle(cleanTitle(query.data.document.title));
     setDescription(query.data.document.description);
     setSummary(cleanSummary(query.data.document.summary));
+    setCategoryKey(query.data.document.category_key || FALLBACK_CATEGORY_KEY);
     setLinks(query.data.document.links.filter((link) => !isOriginalSourceLink(link)));
   }, [query.data]);
 
@@ -46,6 +56,7 @@ export function EditDocumentScreen({ route, navigation }: Props) {
     return {
       title: cleanTitle(query.data.document.title).trim(),
       description: query.data.document.description.trim(),
+      category_key: query.data.document.category_key || FALLBACK_CATEGORY_KEY,
       links: query.data.document.links
         .filter((link) => !isOriginalSourceLink(link))
         .map((link) => ({ url: link.url.trim(), content: link.content.trim() }))
@@ -74,12 +85,15 @@ export function EditDocumentScreen({ route, navigation }: Props) {
     if (nextDescription !== initialState.description) {
       payload.description = nextDescription;
     }
+    if (categoryKey !== initialState.category_key) {
+      payload.category_key = categoryKey;
+    }
     if (JSON.stringify(sanitizedLinks) !== JSON.stringify(initialState.links)) {
       payload.links = sanitizedLinks;
     }
 
     return payload;
-  }, [description, initialState, sanitizedLinks, title]);
+  }, [categoryKey, description, initialState, sanitizedLinks, title]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -105,6 +119,7 @@ export function EditDocumentScreen({ route, navigation }: Props) {
                     title: document.title,
                     description: document.description,
                     summary: document.summary,
+                    category_key: document.category_key,
                   }
                 : item,
             ),
@@ -182,6 +197,15 @@ export function EditDocumentScreen({ route, navigation }: Props) {
           editable={false}
           style={[styles.input, styles.multiInput, styles.readOnlyInput]}
           multiline
+        />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.label}>카테고리</Text>
+        <CategoryChips
+          options={categoriesQuery.data?.items ?? [{ key: FALLBACK_CATEGORY_KEY, label: "기타", order: 9999 }]}
+          value={categoryKey}
+          onChange={setCategoryKey}
         />
       </View>
 
