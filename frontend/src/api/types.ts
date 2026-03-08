@@ -54,6 +54,7 @@ export type Document = {
   is_pinned: boolean;
   links: ExtractedLink[];
   created_at: string;
+  updated_at: string;
 };
 
 export type CategoryItem = {

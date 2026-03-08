@@ -13,9 +13,17 @@ export type AuthState =
   | { status: "signedOut" }
   | { status: "signedIn"; accessToken: string; user: SessionUser };
 
+export type PendingSignupState =
+  | { status: "requested"; email: string }
+  | { status: "confirmed"; email: string }
+  | null;
+
 export type AuthContextValue = {
   state: AuthState;
-  signInWithEmail: (email: string) => Promise<void>;
+  pendingSignup: PendingSignupState;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  signUpWithPassword: (email: string, password: string) => Promise<void>;
+  clearPendingSignup: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 };

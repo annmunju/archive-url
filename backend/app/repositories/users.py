@@ -17,6 +17,10 @@ class UsersRepository:
     def get_by_auth_subject(self, auth_subject: str) -> Optional[User]:
         return self.session.scalar(select(User).where(User.auth_subject == auth_subject))
 
+    def get_by_email(self, email: str) -> Optional[User]:
+        normalized_email = email.strip().lower()
+        return self.session.scalar(select(User).where(User.email == normalized_email))
+
     def get_by_id(self, user_id: Union[str, UUID]) -> Optional[User]:
         return self.session.get(User, user_id)
 
@@ -28,6 +32,8 @@ class UsersRepository:
         avatar_url = raw_metadata.get("avatar_url")
 
         user = self.get_by_auth_subject(auth_subject)
+        if user is None:
+            user = self.get_by_email(email)
         if user is None:
             user = User(
                 auth_provider="supabase",
@@ -41,6 +47,8 @@ class UsersRepository:
             self.session.flush()
             return user
 
+        user.auth_provider = "supabase"
+        user.auth_subject = auth_subject
         user.email = email
         user.display_name = display_name
         user.avatar_url = avatar_url

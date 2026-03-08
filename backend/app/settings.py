@@ -40,7 +40,7 @@ class Settings:
     supabase_jwt_audience: str = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
     supabase_jwt_issuer: Optional[str] = os.getenv("SUPABASE_JWT_ISSUER")
     dev_auth_token: Optional[str] = os.getenv("DEV_AUTH_TOKEN")
-    dev_auth_email: str = os.getenv("DEV_AUTH_EMAIL", "dev@archiveurl.local")
+    dev_auth_email: str = os.getenv("DEV_AUTH_EMAIL", "annmungdo@naver.com")
     jina_fetch_timeout_ms: int = int(os.getenv("JINA_FETCH_TIMEOUT_MS", "20000"))
     ingest_concurrency: int = max(1, int(os.getenv("INGEST_CONCURRENCY", "1")))
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")

@@ -91,6 +91,15 @@ async def auth_config_exception_handler(_request, exc: AuthConfigError):
     )
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_request, exc: Exception):
+    print(f"unhandled exception: {type(exc).__name__}: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content=error_response("INTERNAL_ERROR", str(exc) or "Internal server error", False),
+    )
+
+
 @app.on_event("startup")
 async def startup_event():
     boot = await bootstrap_ingest_worker()

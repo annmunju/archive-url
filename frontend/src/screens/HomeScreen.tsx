@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
 import { AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getDocument } from "@/api/documents";
 import { createIngestJob, listIngestJobs } from "@/api/ingest";
 import type { IngestJob, IngestJobListItem, IngestJobStatus } from "@/api/types";
 import { useAuth } from "@/auth/context";
@@ -16,6 +17,7 @@ const INGEST_RECENT_LIST_LIMIT = 100;
 const INGEST_LIST_POLL_MS = 5000;
 const INGEST_JOBS_QUERY_KEY = ["ingestJobs"] as const;
 const RECENT_FINISHED_WINDOW_MS = 30 * 60 * 1000;
+const DOCUMENT_OUTCOME_THRESHOLD_MS = 5000;
 
 const ACTIVE_STATUSES: IngestJobStatus[] = ["queued", "running"];
 const ACTIVE_STATUS_PRIORITY: Record<IngestJobStatus, number> = {
@@ -60,8 +62,11 @@ export function HomeScreen() {
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [recentJobs, setRecentJobs] = useState<IngestJobListItem[]>([]);
+  const [jobOutcomeLabels, setJobOutcomeLabels] = useState<Record<number, "created" | "updated">>({});
   const [selectedPanel, setSelectedPanel] = useState<"active" | "recent">("active");
   const recentJobTimeoutsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const syncedDocumentJobIdsRef = useRef<Set<number>>(new Set());
+  const resolvedOutcomeJobIdsRef = useRef<Set<number>>(new Set());
   const submitUrlRef = useRef<(rawUrl: string, description?: string) => void>(
     (_rawUrl: string, _description?: string) => undefined,
   );
@@ -208,6 +213,60 @@ export function HomeScreen() {
       }),
     [latestJobsQuery.data?.items],
   );
+
+  useEffect(() => {
+    const completedJobs = [...activeJobs, ...recentFinishedJobs].filter(
+      (item) => item.status === "succeeded" && item.document_id,
+    );
+    const unseenCompletedJobs = completedJobs.filter((item) => !syncedDocumentJobIdsRef.current.has(item.id));
+    if (unseenCompletedJobs.length === 0) {
+      return;
+    }
+
+    unseenCompletedJobs.forEach((item) => {
+      syncedDocumentJobIdsRef.current.add(item.id);
+    });
+
+    void Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["documents"] }),
+      queryClient.invalidateQueries({ queryKey: ["categories"] }),
+    ]);
+  }, [activeJobs, recentFinishedJobs, queryClient]);
+
+  useEffect(() => {
+    const completedJobs = [...activeJobs, ...recentFinishedJobs].filter(
+      (item) => item.status === "succeeded" && item.document_id,
+    );
+    const unresolvedJobs = completedJobs.filter((item) => !resolvedOutcomeJobIdsRef.current.has(item.id));
+    if (unresolvedJobs.length === 0) {
+      return;
+    }
+
+    unresolvedJobs.forEach((item) => {
+      resolvedOutcomeJobIdsRef.current.add(item.id);
+    });
+
+    void Promise.all(
+      unresolvedJobs.map(async (item) => {
+        try {
+          const response = await getDocument(item.document_id as number);
+          const createdAt = Date.parse(response.document.created_at);
+          const updatedAt = Date.parse(item.updated_at);
+          const wasUpdated =
+            !Number.isNaN(createdAt) &&
+            !Number.isNaN(updatedAt) &&
+            updatedAt - createdAt > DOCUMENT_OUTCOME_THRESHOLD_MS;
+
+          setJobOutcomeLabels((current) => ({
+            ...current,
+            [item.id]: wasUpdated ? "updated" : "created",
+          }));
+        } catch {
+          resolvedOutcomeJobIdsRef.current.delete(item.id);
+        }
+      }),
+    );
+  }, [activeJobs, recentFinishedJobs]);
 
   const onSubmit = () => {
     submitUrl(url, note.trim() || undefined);
@@ -403,7 +462,12 @@ export function HomeScreen() {
             {panelItems.length > 0 ? (
               <View style={styles.activityBlock}>
                 {panelItems.map((item, index) => (
-                  <IngestJobRow key={item.id} item={item} isFirst={index === 0} />
+                  <IngestJobRow
+                    key={item.id}
+                    item={item}
+                    isFirst={index === 0}
+                    outcome={jobOutcomeLabels[item.id]}
+                  />
                 ))}
               </View>
             ) : null}
@@ -414,7 +478,15 @@ export function HomeScreen() {
   );
 }
 
-function IngestJobRow({ item, isFirst }: { item: IngestJobListItem; isFirst: boolean }) {
+function IngestJobRow({
+  item,
+  isFirst,
+  outcome,
+}: {
+  item: IngestJobListItem;
+  isFirst: boolean;
+  outcome?: "created" | "updated";
+}) {
   return (
     <View style={[styles.jobRow, !isFirst && styles.jobRowDivider]}>
       <View style={styles.jobRail}>
@@ -429,6 +501,11 @@ function IngestJobRow({ item, isFirst }: { item: IngestJobListItem; isFirst: boo
           {item.normalized_url ?? "URL 정규화 대기 중"}
         </Text>
         <Text style={styles.jobUpdated}>최근 갱신 {fromNow(item.updated_at)}</Text>
+        {item.status === "succeeded" && outcome ? (
+          <Text style={outcome === "updated" ? styles.jobOutcomeUpdated : styles.jobOutcomeCreated}>
+            {outcome === "updated" ? "기존 문서를 업데이트했습니다." : "새 문서를 추가했습니다."}
+          </Text>
+        ) : null}
         {item.status === "failed" && item.error_message ? (
           <Text style={styles.jobError} numberOfLines={2}>
             {item.error_message}
@@ -735,6 +812,16 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  jobOutcomeCreated: {
+    ...typography.body,
+    fontSize: 13,
+    color: "#249B50",
+  },
+  jobOutcomeUpdated: {
+    ...typography.body,
+    fontSize: 13,
+    color: colors.primary,
   },
   jobError: {
     ...typography.body,

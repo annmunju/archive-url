@@ -4,12 +4,12 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { deleteDocument, listCategories, listDocuments, patchDocument } from "@/api/documents";
 import { CategoryChips } from "@/components/CategoryChips";
 import { SwipeableDocumentCard } from "@/components/SwipeableDocumentCard";
-import { colors, typography } from "@/theme/tokens";
+import { colors, radius, typography } from "@/theme/tokens";
 import type { RootStackParamList, TabParamList } from "@/types/navigation";
 import type { CategoryItem, DocumentListItem } from "@/api/types";
 import { ALL_CATEGORY_KEY, applyCategoryFilter, FALLBACK_CATEGORY_KEY, type CategorySelection } from "@/utils/category";
@@ -61,6 +61,8 @@ export function DocumentsScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [category, setCategory] = useState<CategorySelection>(ALL_CATEGORY_KEY);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const handledRefreshToken = useRef<number | null>(null);
   const openedSwipeableRef = useRef<(() => void) | null>(null);
 
@@ -158,9 +160,20 @@ export function DocumentsScreen() {
     setCategory(ALL_CATEGORY_KEY);
   }, [category, categoryOptions]);
 
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const filtered = useMemo(
-    () => sortPinnedFirst(applyCategoryFilter(allItems, category)),
-    [allItems, category],
+    () =>
+      sortPinnedFirst(
+        applyCategoryFilter(allItems, category).filter((item) => {
+          if (!normalizedSearchQuery) {
+            return true;
+          }
+
+          const haystack = [item.title, item.description, item.summary, item.url].join(" ").toLowerCase();
+          return haystack.includes(normalizedSearchQuery);
+        }),
+      ),
+    [allItems, category, normalizedSearchQuery],
   );
 
   const handleSwipeableOpen = (close: () => void) => {
@@ -188,12 +201,36 @@ export function DocumentsScreen() {
           <View style={styles.titleBlock}>
             <Text style={styles.title}>내 문서</Text>
           </View>
+          <Pressable
+            style={styles.searchButton}
+            onPress={() => {
+              if (isSearchOpen) {
+                setSearchQuery("");
+              }
+              setIsSearchOpen((current) => !current);
+            }}
+          >
+            <Text style={styles.searchButtonText}>{isSearchOpen ? "닫기" : "검색"}</Text>
+          </Pressable>
         </View>
+        {isSearchOpen ? (
+          <View style={styles.searchCard}>
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="제목, 요약, URL 검색"
+              placeholderTextColor={colors.textSecondary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.searchInput}
+            />
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.categorySection}>
         <View style={styles.categoryHeader}>
-          <Text style={styles.categoryLabel}>카테고리</Text>
+          <Text style={styles.categoryLabel}>{isSearchOpen ? "검색 결과" : "카테고리"}</Text>
           <Text style={styles.categoryMeta}>{filtered.length}</Text>
         </View>
         <CategoryChips options={categoryOptions} value={category} onChange={setCategory} />
@@ -222,7 +259,11 @@ export function DocumentsScreen() {
             onRefresh={() => query.refetch()}
           />
         }
-        ListEmptyComponent={<Text style={styles.empty}>문서가 없습니다.</Text>}
+        ListEmptyComponent={
+          <Text style={styles.empty}>
+            {normalizedSearchQuery ? "검색 결과가 없습니다." : "문서가 없습니다."}
+          </Text>
+        }
       />
     </SafeAreaView>
   );
@@ -261,6 +302,36 @@ const styles = StyleSheet.create({
     ...typography.screenTitle,
     color: colors.textPrimary,
     letterSpacing: -0.6,
+  },
+  searchButton: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchButtonText: {
+    fontFamily: "System",
+    fontWeight: "600",
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  searchCard: {
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  searchInput: {
+    ...typography.body,
+    fontSize: 15,
+    color: colors.textPrimary,
   },
   categorySection: {
     gap: 10,

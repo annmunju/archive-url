@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -10,24 +10,55 @@ function isValidEmail(value: string) {
 }
 
 export function SignInScreen() {
-  const { signInWithEmail } = useAuth();
+  const { signInWithPassword, signUpWithPassword, pendingSignup, clearPendingSignup } = useAuth();
   const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [submittedMode, setSubmittedMode] = useState<"signin" | "signup" | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const onSubmit = async () => {
+  const isSignIn = mode === "signin";
+
+  useEffect(() => {
+    if (pendingSignup?.status !== "confirmed") {
+      return;
+    }
+    setMode("signin");
+    setEmail(pendingSignup.email);
+    setPassword("");
+    setPasswordConfirm("");
+    setSubmittedMode(null);
+  }, [pendingSignup]);
+
+  const onSubmit = async (mode: "signin" | "signup") => {
     const trimmed = email.trim();
     if (!isValidEmail(trimmed)) {
       Alert.alert("이메일 확인", "유효한 이메일 주소를 입력해 주세요.");
       return;
     }
+    if (password.length < 8) {
+      Alert.alert("비밀번호 확인", "비밀번호는 8자 이상 입력해 주세요.");
+      return;
+    }
+    if (mode === "signup" && password !== passwordConfirm) {
+      Alert.alert("비밀번호 확인", "비밀번호가 일치하지 않습니다.");
+      return;
+    }
 
     setLoading(true);
     try {
-      await signInWithEmail(trimmed);
-      setSubmitted(true);
+      if (mode === "signin") {
+        await signInWithPassword(trimmed, password);
+      } else {
+        await signUpWithPassword(trimmed, password);
+      }
+      setSubmittedMode(mode);
     } catch (error) {
-      Alert.alert("로그인 링크 전송 실패", error instanceof Error ? error.message : "다시 시도해 주세요.");
+      Alert.alert(
+        mode === "signin" ? "로그인 실패" : "회원가입 실패",
+        error instanceof Error ? error.message : "다시 시도해 주세요."
+      );
     } finally {
       setLoading(false);
     }
@@ -37,9 +68,11 @@ export function SignInScreen() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.hero}>
         <Text style={styles.eyebrow}>ArchiveURL</Text>
-        <Text style={styles.title}>로그인 링크를 보내드릴게요.</Text>
+        <Text style={styles.title}>{isSignIn ? "로그인" : "회원가입"}</Text>
         <Text style={styles.body}>
-          이메일로 받은 링크를 탭하면 앱으로 돌아와 자동 로그인됩니다.
+          {isSignIn
+            ? "이메일과 비밀번호로 바로 로그인합니다."
+            : "이메일과 비밀번호로 계정을 만들고, 확인 메일로 계정을 활성화합니다."}
         </Text>
       </View>
 
@@ -55,13 +88,86 @@ export function SignInScreen() {
           placeholder="you@example.com"
           placeholderTextColor={colors.textSecondary}
         />
-        <PrimaryButton label="로그인 링크 보내기" onPress={onSubmit} disabled={loading} loading={loading} />
-        {submitted ? (
+        <Text style={styles.label}>비밀번호</Text>
+        <TextInput
+          value={password}
+          onChangeText={setPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+          textContentType={isSignIn ? "password" : "newPassword"}
+          style={styles.input}
+          placeholder={isSignIn ? "비밀번호" : "8자 이상 비밀번호"}
+          placeholderTextColor={colors.textSecondary}
+        />
+        {!isSignIn ? (
+          <>
+            <Text style={styles.label}>비밀번호 확인</Text>
+            <TextInput
+              value={passwordConfirm}
+              onChangeText={setPasswordConfirm}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              textContentType="newPassword"
+              style={styles.input}
+              placeholder="비밀번호 다시 입력"
+              placeholderTextColor={colors.textSecondary}
+            />
+          </>
+        ) : null}
+        <PrimaryButton
+          label={isSignIn ? "로그인" : "회원가입"}
+          onPress={() => onSubmit(mode)}
+          disabled={loading}
+          loading={loading}
+        />
+        {pendingSignup?.status === "requested" && !isSignIn ? (
           <View style={styles.notice}>
-            <Text style={styles.noticeTitle}>이메일을 확인해 주세요.</Text>
-            <Text style={styles.noticeBody}>{email.trim()} 로 로그인 링크를 보냈습니다.</Text>
+            <Text style={styles.noticeTitle}>이메일 확인이 필요합니다.</Text>
+            <Text style={styles.noticeBody}>
+              {pendingSignup.email} 로 보낸 확인 메일에서 계정 활성화를 완료해 주세요.
+            </Text>
           </View>
         ) : null}
+        {pendingSignup?.status === "confirmed" ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeTitle}>계정 확인이 끝났습니다.</Text>
+            <Text style={styles.noticeBody}>
+              {pendingSignup.email} 계정을 확인했습니다. 이제 같은 이메일과 비밀번호로 로그인하세요.
+            </Text>
+          </View>
+        ) : null}
+        {submittedMode && !(submittedMode === "signup" && pendingSignup) && pendingSignup?.status !== "confirmed" ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeTitle}>
+              {submittedMode === "signin" ? "로그인 중입니다." : "회원가입 메일을 확인해 주세요."}
+            </Text>
+            <Text style={styles.noticeBody}>
+              {submittedMode === "signin"
+                ? `${email.trim()} 계정으로 로그인을 시도했습니다.`
+                : `${email.trim()} 로 회원가입 확인 메일을 보냈습니다.`}
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.footerSwitch}>
+          <Text style={styles.footerSwitchText}>
+            {isSignIn ? "처음 오셨나요?" : "이미 계정이 있나요?"}
+          </Text>
+          <Pressable
+            onPress={() => {
+              setMode(isSignIn ? "signup" : "signin");
+              setSubmittedMode(null);
+              setPassword("");
+              setPasswordConfirm("");
+              if (isSignIn) {
+                void clearPendingSignup();
+              }
+            }}
+          >
+            <Text style={styles.footerSwitchAction}>{isSignIn ? "회원가입하기" : "로그인하기"}</Text>
+          </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -141,5 +247,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: colors.textSecondary,
+  },
+  footerSwitch: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 4,
+  },
+  footerSwitchText: {
+    fontFamily: "System",
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  footerSwitchAction: {
+    fontFamily: "System",
+    fontWeight: "700",
+    fontSize: 14,
+    color: colors.primary,
   },
 });

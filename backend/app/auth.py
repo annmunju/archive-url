@@ -37,6 +37,15 @@ class AuthenticationError(Exception):
 _jwk_client: Optional[Any] = None
 
 
+def _load_jwt():
+    try:
+        import jwt as jwt_module
+        from jwt import InvalidTokenError as invalid_token_error
+    except ModuleNotFoundError as error:
+        raise AuthConfigError("PyJWT[crypto] is not installed") from error
+    return jwt_module, invalid_token_error
+
+
 def get_session():
     if SessionLocal is None:
         raise AuthConfigError("DATABASE_URL is not configured")
@@ -85,12 +94,11 @@ def _decode_access_token(token: str) -> dict[str, Any]:
     if not settings.has_auth_config or not issuer:
         raise AuthConfigError("Supabase auth config is incomplete")
 
-    try:
-        import jwt
-        from jwt import InvalidTokenError
+    jwt_module, invalid_token_error = _load_jwt()
 
+    try:
         signing_key = _get_jwk_client().get_signing_key_from_jwt(token)
-        claims = jwt.decode(
+        claims = jwt_module.decode(
             token,
             signing_key.key,
             algorithms=["RS256", "ES256"],
@@ -98,12 +106,10 @@ def _decode_access_token(token: str) -> dict[str, Any]:
             issuer=issuer,
             options={"require": ["exp", "iat", "sub"]},
         )
-    except jwt.ExpiredSignatureError as error:
+    except jwt_module.ExpiredSignatureError as error:
         raise AuthenticationError("TOKEN_EXPIRED", "Access token expired", 401, retryable=True) from error
-    except InvalidTokenError as error:
+    except invalid_token_error as error:
         raise AuthenticationError("UNAUTHORIZED", "Invalid access token", 401) from error
-    except ModuleNotFoundError as error:
-        raise AuthConfigError("PyJWT[crypto] is not installed") from error
 
     if not claims.get("email"):
         raise AuthenticationError("UNAUTHORIZED", "Email claim missing", 401)
