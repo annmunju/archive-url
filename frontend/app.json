@@ -2,12 +2,14 @@
   "expo": {
     "name": "ARCHIVE-URL",
     "slug": "snap-url",
+    "icon": "./assets/icon.png",
     "newArchEnabled": true,
     "scheme": "snapurl",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
+      "icon": "./assets/icon.png",
       "supportsTablet": false,
       "bundleIdentifier": "com.snapurl.app"
     },

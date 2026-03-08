@@ -344,6 +344,7 @@ export function HomeScreen() {
               style={styles.noteInput}
             />
           </View>
+          <View style={styles.composeButtonGap} />
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           <PrimaryButton label="수집 시작" onPress={onSubmit} disabled={!valid} loading={mutation.isPending} />
         </View>
@@ -610,6 +611,9 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     minHeight: 64,
     lineHeight: 21,
+  },
+  composeButtonGap: {
+    height: 0,
   },
   errorBorder: {
     borderColor: colors.error,
