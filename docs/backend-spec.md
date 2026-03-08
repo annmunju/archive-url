@@ -153,6 +153,25 @@
 - `DEV_AUTH_TOKEN`
 - `DEV_AUTH_EMAIL`
 
+로딩 순서:
+
+- `.env`
+- `.env.{ENVIRONMENT}`
+- `.env.local`
+- `.env.{ENVIRONMENT}.local`
+
+권장 구조:
+
+- 개발: `ENVIRONMENT=development`
+- 스테이징: `ENVIRONMENT=staging`
+- 프로덕션: `ENVIRONMENT=production`
+
+예시 파일:
+
+- `backend/.env.example`
+- `backend/.env.staging.example`
+- `backend/.env.production.example`
+
 ## 9. 마이그레이션 / 데이터 이전
 
 구현됨:
@@ -226,3 +245,47 @@
 3. backup 정책 정리
 4. queue/worker 분리 고도화
 5. audit log 활용 확대
+
+## 14. staging / production 운용 규칙
+
+기본 원칙:
+
+- staging과 production은 서로 다른 Postgres DB를 사용
+- Supabase 프로젝트도 가능하면 분리
+- `DATABASE_URL`, `SUPABASE_URL`, `SENTRY_DSN` 은 환경별로 분리
+- production에서는 `DEV_AUTH_*` 값을 비워 둔다
+
+실행 예시:
+
+```bash
+cd backend
+cp .env.production.example .env.production
+ENVIRONMENT=production PYTHONPATH=backend ./.venv/bin/python run.py
+```
+
+## 15. Railway 배포 기준
+
+현재 기준 파일:
+
+- `railway.json`
+- `backend/Dockerfile`
+
+배포 방식:
+
+- Railway service는 repo root를 소스로 사용
+- Dockerfile은 `backend/Dockerfile`
+- pre-deploy에서 `alembic upgrade head`
+- healthcheck는 `/health`
+
+필수 Railway 변수:
+
+- `ENVIRONMENT=production`
+- `DATABASE_URL`
+- `SUPABASE_URL`
+- `SUPABASE_JWT_AUDIENCE=authenticated`
+- `OPENAI_API_KEY` (필요 시)
+
+권장:
+
+- `DEV_AUTH_*` 는 production에서 비워 둔다
+- `SENTRY_DSN` 은 붙일 때만 설정

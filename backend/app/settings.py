@@ -3,7 +3,21 @@ from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-load_dotenv()
+
+def load_environment_files() -> None:
+    environment = (os.getenv("ENVIRONMENT") or "development").strip() or "development"
+    candidates = (
+        ".env",
+        f".env.{environment}",
+        ".env.local",
+        f".env.{environment}.local",
+    )
+
+    for filename in candidates:
+        load_dotenv(filename, override=True)
+
+
+load_environment_files()
 
 
 DEFAULT_DB_PATH = "./data/archive-url.db"

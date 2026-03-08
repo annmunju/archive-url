@@ -6,8 +6,14 @@
   "scripts": {
     "postinstall": "node scripts/patch-expo-header.js",
     "start": "expo start",
+    "start:staging": "APP_ENV=staging expo start",
+    "start:production": "APP_ENV=production expo start",
     "ios": "expo run:ios",
+    "ios:staging": "APP_ENV=staging expo run:ios",
+    "ios:production": "APP_ENV=production expo run:ios",
     "android": "expo run:android",
+    "android:staging": "APP_ENV=staging expo run:android",
+    "android:production": "APP_ENV=production expo run:android",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit"
   },

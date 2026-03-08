@@ -13,6 +13,38 @@ cp .env.example .env
 python run.py
 ```
 
+환경별 실행:
+
+```bash
+cp .env.staging.example .env.staging
+ENVIRONMENT=staging python run.py
+```
+
+## Railway 배포
+
+현재 저장소에는 Railway 배포용 파일이 포함되어 있다.
+
+- `railway.json`
+- `backend/Dockerfile`
+
+권장 설정:
+
+- Source repo root: repository root
+- Config as code: root `railway.json`
+- Dockerfile: `backend/Dockerfile`
+
+필수 Railway 변수:
+
+- `ENVIRONMENT=production`
+- `DATABASE_URL`
+- `SUPABASE_URL`
+- `SUPABASE_JWT_AUDIENCE=authenticated`
+- `OPENAI_API_KEY` (필요 시)
+
+프론트 production env:
+
+- `EXPO_PUBLIC_API_BASE_URL=https://<your-service>.up.railway.app`
+
 ## 엔드포인트
 
 - `GET /health`
@@ -32,3 +64,10 @@ python run.py
 - `INGEST_CONCURRENCY` (default: `1`)
 - `OPENAI_API_KEY` (없으면 fallback summary)
 - `OPENAI_MODEL` (default: `gpt-4o-mini`)
+
+로딩 순서:
+
+- `.env`
+- `.env.{ENVIRONMENT}`
+- `.env.local`
+- `.env.{ENVIRONMENT}.local`

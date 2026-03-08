@@ -187,6 +187,25 @@ API URL 우선순위:
 - `EXPO_PUBLIC_DEV_AUTH_TOKEN`
 - `EXPO_PUBLIC_DEV_AUTH_EMAIL`
 
+로딩 순서:
+
+- `.env`
+- `.env.{APP_ENV}`
+- `.env.local`
+- `.env.{APP_ENV}.local`
+
+권장 환경명:
+
+- `APP_ENV=development`
+- `APP_ENV=staging`
+- `APP_ENV=production`
+
+예시 파일:
+
+- `frontend/.env.example`
+- `frontend/.env.staging.example`
+- `frontend/.env.production.example`
+
 iOS 네이티브 변경 후:
 
 ```bash
@@ -196,9 +215,26 @@ cd ..
 npx expo run:ios --device
 ```
 
+환경별 실행 예시:
+
+```bash
+cd frontend
+npm run start:staging
+npm run ios:production
+```
+
 ## 11. 남은 프론트 우선순위
 
 1. 공유 성공/실패 후 사용자 피드백 정리
 2. 설정 화면 분리
 3. Privacy Policy / Support 링크 노출
 4. Sign in with Apple 검토
+
+## 12. staging / production 운용 규칙
+
+기본 원칙:
+
+- `EXPO_PUBLIC_API_BASE_URL` 은 환경별 backend URL로 분리
+- staging 앱은 staging Supabase 프로젝트에만 연결
+- production 빌드에서는 `EXPO_PUBLIC_DEV_AUTH_*` 값을 비워 둔다
+- 실기기 테스트는 `APP_ENV=staging` 기준으로 먼저 검증한 뒤 production으로 올린다
